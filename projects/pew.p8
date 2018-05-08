@@ -222,7 +222,7 @@ if btn(5) then ship.dx = 0 end
 		if ship.fire_del <= 0 then
 			ship.fire_del = 15
 
-			cam_kx = 0
+			cam_kx = 3
 			if (ship.left) cam_kx *= -1
 
 			local mx = 4
