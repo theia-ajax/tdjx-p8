@@ -22,16 +22,16 @@ function make_actor(x, y)
  a.inertia = 0.6
  a.bounce  = 1
  a.frames=2
- 
+
  -- half-width and half-height
  -- slightly less than 0.5 so
  -- that will fit through 1-wide
  -- holes.
  a.w = 0.4
  a.h = 0.4
- 
+
  add(actor,a)
- 
+
  return a
 end
 
@@ -39,31 +39,31 @@ function _init()
  -- make player top left
  pl = make_actor(2,2)
  pl.spr = 17
- 
+
  -- make a bouncy ball
  local ball = make_actor(8.5,7.5)
  ball.spr = 33
  ball.dx=0.05
  ball.dy=-0.1
  ball.inertia=0.5
- 
+
  local ball = make_actor(7,5)
  ball.spr = 49
  ball.dx=-0.1
  ball.dy=0.15
  ball.inertia=1
  ball.bounce = 0.8
- 
- 
+
+
  -- tiny guy
- 
+
  a = make_actor(7,5)
  a.spr=5
  a.frames=4
  a.dx=1/8
  a.inertia=0.8
- 
- 
+
+
 end
 
 -- for any given point on the
@@ -74,12 +74,12 @@ function solid(x, y)
 
  -- grab the cell value
  val=mget(x, y)
- 
+
  -- check if flag 1 is set (the
- -- orange toggle button in the 
+ -- orange toggle button in the
  -- sprite editor)
  return fget(val, 1)
- 
+
 end
 
 -- solid_area
@@ -91,7 +91,7 @@ end
 
 function solid_area(x,y,w,h)
 
- return 
+ return
   solid(x-w,y-h) or
   solid(x+w,y-h) or
   solid(x-w,y+h) or
@@ -108,30 +108,30 @@ function solid_actor(a, dx, dy)
    local y=(a.y+dy) - a2.y
    if ((abs(x) < (a.w+a2.w)) and
       (abs(y) < (a.h+a2.h)))
-   then 
-    
+   then
+
     -- moving together?
     -- this allows actors to
-    -- overlap initially 
-    -- without sticking together    
+    -- overlap initially
+    -- without sticking together
     if (dx != 0 and abs(x) <
         abs(a.x-a2.x)) then
      v=a.dx + a2.dy
      a.dx = v/2
      a2.dx = v/2
-     return true 
+     return true
     end
-    
+
     if (dy != 0 and abs(y) <
         abs(a.y-a2.y)) then
      v=a.dy + a2.dy
      a.dy=v/2
      a2.dy=v/2
-     return true 
+     return true
     end
-    
+
     --return true
-    
+
    end
   end
  end
@@ -144,7 +144,7 @@ function solid_a(a, dx, dy)
  if solid_area(a.x+dx,a.y+dy,
     a.w,a.h) then
     return true end
- return solid_actor(a, dx, dy) 
+ return solid_actor(a, dx, dy)
 end
 
 function move_actor(a)
@@ -153,10 +153,10 @@ function move_actor(a)
  -- if the resulting position
  -- will not overlap with a wall
 
- if not solid_a(a, a.dx, 0) 
+ if not solid_a(a, a.dx, 0)
  then
   a.x += a.dx
- else   
+ else
   -- otherwise bounce
   a.dx *= -a.bounce
   sfx(2)
@@ -170,43 +170,43 @@ function move_actor(a)
   a.dy *= -a.bounce
   sfx(2)
  end
- 
+
  -- apply inertia
  -- set dx,dy to zero if you
  -- don't want inertia
- 
+
  a.dx *= a.inertia
  a.dy *= a.inertia
- 
+
  -- advance one frame every
  -- time actor moves 1/4 of
  -- a tile
- 
+
  a.frame += abs(a.dx) * 4
  a.frame += abs(a.dy) * 4
  a.frame %= a.frames
 
  a.t += 1
- 
+
 end
 
 function control_player(pl)
 
  -- how fast to accelerate
  accel = 0.1
- if (btn(0)) pl.dx -= accel 
- if (btn(1)) pl.dx += accel 
- if (btn(2)) pl.dy -= accel 
- if (btn(3)) pl.dy += accel 
+ if (btn(0)) pl.dx -= accel
+ if (btn(1)) pl.dx += accel
+ if (btn(2)) pl.dy -= accel
+ if (btn(3)) pl.dy += accel
 
  -- play a sound if moving
  -- (every 4 ticks)
- 
+
  if (abs(pl.dx)+abs(pl.dy) > 0.1
      and (pl.t%4) == 0) then
   sfx(1)
  end
- 
+
 end
 
 function _update()
@@ -224,10 +224,10 @@ function _draw()
  cls()
  map(0,0,0,0,16,16)
  foreach(actor,draw_actor)
- 
+
  print("x "..pl.x,0,120,7)
  print("y "..pl.y,64,120,7)
- 
+
 end
 
 __gfx__
