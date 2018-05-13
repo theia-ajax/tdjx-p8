@@ -556,8 +556,7 @@ function prn_small(digits, x, y, col)
 	local base_sp = 64
 	for i = 1, #digits do
 		local c = sub(digits, i, i)
-		local sp = k_smfnt
-	[c]
+		local sp = k_smfnt[c]
 		if sp then
 			spr(sp, x, y)
 			x += 5
