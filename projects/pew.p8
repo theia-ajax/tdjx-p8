@@ -143,6 +143,8 @@ function new_bullet(x, y, dx, dy)
 	blt.oy = 1
 	blt.w = 6
 	blt.h = 4
+	blt.hw = blt.w / 2
+	blt.hh = blt.h / 2
 	blt.spr = 4
 	blt.life = 50
 	blt.dead = false
@@ -163,14 +165,21 @@ function bullet_update(blt)
 	blt.y += blt.dy
 	blt.life -= 1
 	if blt.life <= 0 then
-		blt.dead = true
+		bullet_kill(blt)
 	end
 
 	if area_solid(blt.x + blt.ox,
 		blt.y + blt.oy,
-		blt.w, blt.h) then
-		blt.dead = true
+		blt.w, blt.h)
+	then
+		bullet_kill(blt)
 	end
+end
+
+function bullet_kill(blt)
+	blt.dead = true
+	new_spark(blt.x + blt.hw,
+		blt.y + blt.hh)
 end
 
 function bullet_draw(blt)
@@ -376,7 +385,6 @@ function _update60()
 		local blt = bullets[i]
 		bullet_update(blt)
 		if blt.dead then
-			new_spark(blt.x, blt.y)
 			add(bullets.rem_q, i)
 		end
 	end
