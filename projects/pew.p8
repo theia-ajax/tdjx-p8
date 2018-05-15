@@ -349,7 +349,7 @@ function ship_update(ship)
 		if ship.fire_del <= 0 then
 			ship.fire_del = 7
 
-			local kx = 3
+			local kx = 2
 			if (ship.left) kx *= -1
 			cam_kick(kx)
 
@@ -460,7 +460,7 @@ function new_camera()
 	cam.x = 63
 	cam.y = 63
 	cam.kx = 0
-	cam.kdx = 0.3
+	cam.kdx = 0.6
 	cam.tx = 0
 
 	return cam
