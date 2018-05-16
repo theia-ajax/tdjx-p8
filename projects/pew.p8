@@ -477,7 +477,7 @@ function cam_update(cam)
 
 	cam.kx = decay(cam.kx, cam.kdx)
 
-	cam.tx = lerp(cam.tx, tar, 0.1)
+	cam.tx = m.lerp(cam.tx, tar, 0.1)
 	cam.x = ship.x + cam.tx
 
 	-- clamp pos before knockback
@@ -591,14 +591,23 @@ function _draw()
 	camera(0, 0)
 	line(0, 121, 127, 121, 12)
 
-	prn_small(num_to_str(t),
+	prn_small(num_to_str(game.score),
 		2, 123)
 
 	-- print("x:"..ship.x.." y:"..ship.y, 0, 0, 11)
 end
 
-function lerp(a, b, t)
+m = {}
+function m.lerp(a, b, t)
 	return a + (b - a) * t
+end
+
+function m.sin(deg)
+	return sin(deg / 360)
+end
+
+function m.cos(deg)
+	return cos(deg / 360)
 end
 
 function fst_del(arr, idx)
@@ -700,6 +709,9 @@ function prn_small(digits, x, y, col)
 end
 
 function num_to_str(num)
+	if type(num) ~= "number" then
+		return ""
+	end
 	local ret = ""
 	if (num == 0) return "0"
 	while num > 0 do
