@@ -74,7 +74,9 @@ function new_level()
 end
 
 function level_update(lvl)
-	if t % 180 == 0 then
+	if t % 180 == 0 and
+		game.enm_ct < 6
+	then
 		for pt in all(lvl.spn_pts) do
 			new_enemy(pt.x, pt.y)
 		end
@@ -139,6 +141,8 @@ function new_entity(x, y)
 	-- collider offset
 	ent.ox = 0
 	ent.oy = 0
+
+	ent.on_death = function() end
 
 	return ent
 end
@@ -306,9 +310,9 @@ function ship_update(ship)
 			ship.dcl_y)
 	end
 
-	ship.dx = clamp(ship.dx,
+	ship.dx = m.clamp(ship.dx,
 		-ship.max_x, ship.max_x)
-	ship.dy = clamp(ship.dy,
+	ship.dy = m.clamp(ship.dy,
 		-ship.max_y, ship.max_y)
 
 	if (btn(5)) ship.dx = 0
@@ -401,12 +405,24 @@ function new_enemy(x, y)
 	enm.w = 8
 	enm.h = 6
 	enm.oy = 1
-	enm.dx = rnd_rng(-1, 1)
+	enm.l_rot = 0
+	enm.rot = 0
+	enm.dx = 0
 	enm.dy = 0
+	enm.spd = 0
+	enm.mx_spd = 0.45
+	enm.accel = 0.01
+	enm.mn_ang = 15
 	enm.spr = 48
 	enm.sprf = 8
 
+	enm.on_death = function()
+		game.enm_ct -= 1
+	end
+
 	add(enemies, enm)
+
+	game.enm_ct += 1
 
 	return enm
 end
@@ -419,9 +435,23 @@ function enemy_update(enm)
 		if (enm.spr > 52) enm.spr = 48
 	end
 
-	enm.dx = decay(enm.dx, 0.001)
+	local delx = ship.x - enm.x
+	local dely = ship.y - enm.y
+	enm.l_rot = enm.rot
+	enm.rot = m.atan2(delx, dely)
 
-	enm.dy += 0.01
+	if m.angle_diff(enm.rot,
+		enm.l_rot) > enm.mn_ang
+	then
+		enm.spd = 0
+	else
+		enm.spd += enm.accel
+		enm.spd = m.clamp(enm.spd,
+			0, enm.mx_spd)
+	end
+
+	enm.dx = m.cos(enm.rot) * enm.spd
+	enm.dy = m.sin(enm.rot) * enm.spd
 
 	-- physics
 	local nx = enm.x + enm.dx
@@ -430,13 +460,13 @@ function enemy_update(enm)
 	if entity_solid(enm, enm.dx, 0)
 	then
 		-- enm.dx *= -0.5
-		enm.dx *= -1
+		enm.dx = 0
 	end
 
 	if entity_solid(enm, 0, enm.dy)
 	then
 		-- enm.dy *= -0.5
-		enm.dy *= -0.95
+		enm.dy = 0
 	end
 
 	enm.x += enm.dx
@@ -448,6 +478,8 @@ end
 
 function enemy_draw(enm)
 	spr(enm.spr, enm.x, enm.y)
+
+
 end
 
 -----------------------------------
@@ -483,7 +515,7 @@ function cam_update(cam)
 	-- clamp pos before knockback
 	-- is added so knockback doesnt
 	-- disappear at edges of stages
-	cam.x = clamp(cam.x,
+	cam.x = m.clamp(cam.x,
 		level.min_x, level.max_x)
 
 	cam.x += cam.kx
@@ -512,6 +544,11 @@ function mngr_update(mngr)
 		mngr.update(mngr[i])
 		if mngr[i].dead then
 			add(mngr.rem_q, i)
+			if type(mngr[i].on_death) ==
+				"function"
+			then
+				mngr[i].on_death()
+			end
 		end
 	end
 	fst_del(mngr, mngr.rem_q)
@@ -531,6 +568,7 @@ function _init()
 	game = {}
 	game.score = 0
 	game.high = 999
+	game.enm_ct = 0
 
 	cam = new_camera()
 
@@ -591,12 +629,15 @@ function _draw()
 	camera(0, 0)
 	line(0, 121, 127, 121, 12)
 
-	prn_small(num_to_str(game.score),
+	prn_small(num_to_str(game.enm_ct),
 		2, 123)
 
 	-- print("x:"..ship.x.." y:"..ship.y, 0, 0, 11)
 end
 
+-----------------------------------
+-- math --
+-----------------------------------
 m = {}
 function m.lerp(a, b, t)
 	return a + (b - a) * t
@@ -608,6 +649,24 @@ end
 
 function m.cos(deg)
 	return cos(deg / 360)
+end
+
+function m.atan2(dx, dy)
+	return atan2(dx, dy) * 360
+end
+
+function m.angle_diff(a1, a2)
+	print(a1, 0, 50)
+	print(a2, 0, 60)
+	if abs(a1 - a2) > 180 then
+		return (min(a1, a2) + 180) - max(a1, a2)
+	else
+		return max(a1, a2) - min(a1, a2)
+	end
+end
+
+function m.clamp(v, low, high)
+	return max(min(v, high), low)
 end
 
 function fst_del(arr, idx)
@@ -662,10 +721,6 @@ end
 
 function decay(v, dv, tg)
 	return move_to(v, tg or 0, dv)
-end
-
-function clamp(v, low, high)
-	return max(min(v, high), low)
 end
 
 function rnd_rng(l, h)
@@ -914,13 +969,13 @@ __sfx__
 01100000107751377517775137751077513775177751377510775137751777513775107751377517775137750f7751277517775127750f7751277517775127750f7751277517775127750f775127751777512775
 011000001c3601c3511c3411c331233602335123341233311e3601e3511e3411e3311f3601f3511f3411f3311b3601b3511b3411b331233602335123341233311e3601e3511e3411e3311b3601b3511b3411b331
 011000001c4701c4711c4711c47126470264712647126471244702447124471244711c4701c4711c4711c47121470214712147121471264702647126471264712447024471244712447121470214712147121471
-01080000103000c0731c605120731060513673106051c605103000c0731c605120731060513673106051c605103000c0731c6051207310605136731060512073103000c0731c605120731060513673106051c605
+010d00200c0731c60500000120031267313673106050c6030c0731c60500000120031267313673106050c6030c0731c60500000120031267313673106050c6030c0731c60500000120031267313673106050c603
 011000000c0520c0520c0530c0551205212052120531205513052130521305313055120521205212053120530c0520c0520c0530c055120521205212053120551305213052130531305512052120521205312053
-0008002012452274001345225400124522240013452214021e3541e3561e2561e4561e4521e4521e4521e45512452274001345225400124522240013452214021b3541b3561b2561b4561b4521b4521b4521b455
-001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0108002012452274001345225400124522240013452214021e3541e3561e2561e4561e4521e4521e4521e45512452274001345225400124522240013452214021b3541b3561b2561b4561b4521b4521b4521b455
+011800001e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f550
 000100000c150191500b3501c350161501715017150293500d1501515014150121500f1500c150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __music__
 03 01424344
 03 44050644
-02 41424344
+03 07044344
 
