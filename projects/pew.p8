@@ -495,10 +495,6 @@ function enemy_update(enm)
 	enm.dx = m.cos(enm.rot) * enm.spd
 	enm.dy = m.sin(enm.rot) * enm.spd
 
-	if enm.dx > 10 or enm.dy > 10 then
-		err_log("wat")
-	end
-
 	local cx1, cy1 =
 		entity_center(enm)
 
@@ -675,8 +671,6 @@ function _init()
 end
 
 function _update60()
-	t += 1
-
 	if (t == 32766) t = 0
 
 	if (t % 4 == 0) game.score += 1
@@ -751,13 +745,14 @@ function m.atan2(dx, dy)
 end
 
 function m.angle_diff(a1, a2)
-	print(a1, 0, 50)
-	print(a2, 0, 60)
-	if abs(a1 - a2) > 180 then
-		return (min(a1, a2) + 180) - max(a1, a2)
-	else
-		return max(a1, a2) - min(a1, a2)
-	end
+	print(a1, 0, 8)
+	print(a2, 0, 16)
+	local a = a2 - a1
+	return m.mod((a + 180), 360) - 180
+end
+
+function m.mod(a, b)
+	return (a % b + b) % b
 end
 
 function m.clamp(v, low, high)
