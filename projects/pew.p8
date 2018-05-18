@@ -95,7 +95,7 @@ end
 
 function level_update(lvl)
 	if t % 30 == 0 and
-		game.enm_ct < 24
+		game.enm_ct < 12
 	then
 		for pt in all(lvl.spn_pts) do
 			new_enemy(pt.x, pt.y)
@@ -450,7 +450,7 @@ function new_enemy(x, y)
 	enm.dx = 0
 	enm.dy = 0
 	enm.spd = 0
-	enm.mx_spd = 0.45
+	enm.mx_spd = 0.4
 	enm.accel = 0.01
 	enm.mn_ang = 15
 	enm.spr = 48
@@ -482,8 +482,11 @@ function enemy_update(enm)
 	enm.l_rot = enm.rot
 	enm.rot = m.atan2(delx, dely)
 
-	if m.angle_diff(enm.rot,
-		enm.l_rot) > enm.mn_ang
+	local da = m.angle_diff(enm.rot,
+		enm.l_rot)
+
+	if abs(m.angle_diff(enm.rot,
+		enm.l_rot)) < enm.mn_ang
 	then
 		enm.spd = 0
 	else
@@ -498,47 +501,50 @@ function enemy_update(enm)
 	local cx1, cy1 =
 		entity_center(enm)
 
+	local ngx, ngy = 0, 0
 	for e in all(enemies) do
 		if e ~= enm then
 			local cx2, cy2 =
 				entity_center(e)
 
 			if m.dist2(cx1, cy1,
-				cx2, cy2) < 16
+				cx2, cy2) < 25
 			then
 				local delx, dely =
 					cx1 - cx2, cy1 - cy2
+				local l = m.mag(delx, dely)
+				delx /= l
+				dely /= l
 				if delx ~= 0 then
-					enm.dx += 0.4 * sgn(delx)
+					-- enm.dx += delx
 				end
 				if dely ~= 0 then
-					enm.dy += 0.4 * sgn(dely)
+					-- enm.dy += dely
 				end
 			end
 		end
 	end
 
 	-- physics
-	local nx = enm.x + enm.dx
-	local ny = enm.y + enm.dy
+	local nx = enm.x + enm.dx + ngx
+	local ny = enm.y + enm.dy + ngy
 
 	if entity_solid(enm, enm.dx, 0)
 	then
 		-- enm.dx *= -0.5
 		enm.dx = 0
+		ngx = 0
 	end
 
 	if entity_solid(enm, 0, enm.dy)
 	then
 		-- enm.dy *= -0.5
 		enm.dy = 0
+		ngy = 0
 	end
 
-	enm.x += enm.dx
-	enm.y += enm.dy
-
-	enm.x += enm.dx
-	enm.y += enm.dy
+	enm.x += enm.dx + ngx
+	enm.y += enm.dy + ngy
 
 	if (enm.flash > 0) enm.flash -= 1
 end
@@ -671,6 +677,7 @@ function _init()
 end
 
 function _update60()
+	t += 1
 	if (t == 32766) t = 0
 
 	if (t % 4 == 0) game.score += 1
@@ -767,6 +774,10 @@ end
 function m.dist2(x1, y1, x2, y2)
 	return (x2 - x1) * (x2 - x1)
 		+ (y2 - y1) * (y2 - y1)
+end
+
+function m.mag(x, y)
+	return m.dist(0, 0, x, y)
 end
 --------------------------------
 
