@@ -18,8 +18,7 @@ function area_solid(x, y, w, h)
 		or point_solid(x+w, y+h)
 end
 
-function rect_overlap(
-	x1, y1, w1, h1,
+function rect_overlap(x1, y1, w1, h1,
 	x2, y2, w2, h2)
 
 	return x1 <= x2 + w2
@@ -445,8 +444,8 @@ function new_enemy(x, y)
 	enm.w = 8
 	enm.h = 6
 	enm.oy = 1
-	enm.l_rot = 0
 	enm.rot = 0
+	enm.tg_rot = 0
 	enm.dx = 0
 	enm.dy = 0
 	enm.spd = 0
@@ -479,14 +478,14 @@ function enemy_update(enm)
 
 	local delx = ship.x - enm.x
 	local dely = ship.y - enm.y
-	enm.l_rot = enm.rot
-	enm.rot = m.atan2(delx, dely)
+	enm.tg_rot = m.atan2(delx, dely)
+	enm.rot = m.lerp(enm.rot,
+		enm.tg_rot, 0.1)
 
-	local da = m.angle_diff(enm.rot,
-		enm.l_rot)
+	local da = m.angle_diff(enm.tg_rot,
+		enm.rot)
 
-	if abs(m.angle_diff(enm.rot,
-		enm.l_rot)) < enm.mn_ang
+	if abs(da) > enm.mn_ang
 	then
 		enm.spd = 0
 	else
@@ -516,10 +515,10 @@ function enemy_update(enm)
 				delx /= l
 				dely /= l
 				if delx ~= 0 then
-					-- enm.dx += delx
+					ngx = delx
 				end
 				if dely ~= 0 then
-					-- enm.dy += dely
+					ngy = dely
 				end
 			end
 		end
@@ -566,6 +565,12 @@ function enemy_draw(enm)
 	end
 
 	spr(enm.spr, enm.x, enm.y)
+
+	local cx, cy = entity_center(enm)
+	line(cx, cy,
+		cx + m.cos(enm.rot) * 8,
+		cy + m.sin(enm.rot) * 8,
+		10)
 
 	pal()
 end
