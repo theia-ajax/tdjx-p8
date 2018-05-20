@@ -187,19 +187,25 @@ function chk_win()
 end
 
 function on_mclick(btn)
-	if btn == 1 then
-		local cell = cell_fromws(mouse.x,
-			mouse.y)
-		if cell and
-			not cell_gf(cell, k_flagflg)
-		then
-			cell_sf(cell, k_prsflg)
-		end
-		lmbcell = cell
-	elseif btn == 2 then
-		if not lmbcell then
-			rmbcell = cell_fromws(mouse.x,
+	if gs == k_gsplay then
+		if btn == 1 then
+			local cell = cell_fromws(mouse.x,
 				mouse.y)
+			if cell and
+				not cell_gf(cell, k_flagflg)
+			then
+				cell_sf(cell, k_prsflg)
+			end
+			lmbcell = cell
+		elseif btn == 2 then
+			if not lmbcell then
+				rmbcell = cell_fromws(mouse.x,
+					mouse.y)
+			end
+		end
+	elseif gs == k_gsmenu then
+		if btn == 1 then
+			start_play()
 		end
 	end
 end
@@ -288,14 +294,47 @@ end
 k_gsplay = 1
 k_gsdead = 2
 k_gswin = 3
+k_gsmenu = 4
 
 function restart()
 	gs = k_gsplay
-	clra(board)
-	pop_board()
+	pop_board(settings)
 end
 
-function pop_board()
+function pop_board(settings)
+	local w, h, mct = settings.w,
+		settings.h,
+		settings.mct
+
+
+	board = {}
+	board.w = w
+	board.h = h
+
+	board.w = min(board.w, 21)
+	board.h = min(board.h, 19)
+
+	board.sz = board.w * board.h
+
+	board.mct = min(mct, board.sz - 1)
+
+	if board.w > 15 or
+		board.h > 14
+	then
+		board.big = false
+		board.cw = 6
+		board.ch = 6
+	else
+		board.big = true
+		board.cw = 8
+		board.ch = 8
+	end
+
+	local tw = board.w * board.cw
+	local th = board.h * board.ch
+	board.ox = (128 - tw) / 2
+	board.oy = (128 - th) / 2 + board.ch
+
 	for i = 1, board.sz do
 		local x = (i - 1) % board.w
 		local y = flr((i - 1) / board.w)
@@ -337,11 +376,22 @@ k_spr_lg["mine"] = 4
 k_spr_lg["flag"] = 6
 k_spr_lg["nmst"] = 15
 
+function start_play()
+	gs = k_gsplay
+	pop_board(settings)
+end
+
 -----------------------------------
 -- main --
 -----------------------------------
 function _init()
 	poke(0x5f2d, 1)
+
+	settings = {
+		w = 8,
+		h = 8,
+		mct = 10,
+	}
 
 	mouse = {}
 	mouse.x = 0
@@ -351,38 +401,7 @@ function _init()
 	mouse.cx = 0
 	mouse.cy = 0
 
-	gs = k_gsplay
-
-	board = {}
-	board.w = 21
-	board.h = 19
-
-	board.w = min(board.w, 21)
-	board.h = min(board.h, 19)
-
-	board.sz = board.w * board.h
-
-	board.mct = 10
-	board.mct = min(board.mct, flr(board.sz * 0.7))
-
-	if board.w > 15 or
-		board.h > 14
-	then
-		board.big = false
-		board.cw = 6
-		board.ch = 6
-	else
-		board.big = true
-		board.cw = 8
-		board.ch = 8
-	end
-
-	local tw = board.w * board.cw
-	local th = board.h * board.ch
-	board.ox = (128 - tw) / 2
-	board.oy = (128 - th) / 2 + board.ch
-
-	pop_board()
+	gs = k_gsmenu
 end
 
 function _update60()
@@ -417,6 +436,16 @@ function _draw()
 		line(0, y, y, 0, c)
 	end
 
+	if gs ~= k_gsmenu then
+		draw_play()
+	else
+
+	end
+
+	spr(5, mouse.x-3, mouse.y-3)
+end
+
+function draw_play()
 	local spst = k_spr_lg
 	if not board.big then
 		spst = k_spr_sm
@@ -489,12 +518,8 @@ function _draw()
 	local mt = ct_mines()
 	local ft = ct_flags()
 	spr(4, 119, 0)
-	local sstr = tostr(mt-ft)
+	local sstr = tostr(mt-ft).."/"..mt
 	print(sstr, 120-#sstr*4, 1, 7)
-
-	spr(5, mouse.x-3, mouse.y-3)
-
-	-- loggers_draw()
 end
 -----------------------------------
 
