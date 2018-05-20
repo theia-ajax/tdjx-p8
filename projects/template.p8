@@ -142,7 +142,7 @@ end
 -- random integer value
 -- in range [l..h] (inclusive)
 function m.rndri(l, h)
-	return flr(rnd_rng(l, h))
+	return flr(m.rndr(l, h))
 end
 --------------------------------
 
