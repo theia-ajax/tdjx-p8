@@ -715,6 +715,8 @@ function resume(d) tdel = d or 1 end
 -- main --
 -----------------------------------
 function _init()
+	poke(0x5f2d, 1)
+
 	game = {}
 	game.score = 0
 	game.high = 999
@@ -752,6 +754,12 @@ function _update60()
 	log_update()
 
 	dbg("fps:"..tostr(stat(7)))
+	dbg(stat(30))
+	dbg(stat(31))
+	dbg(stat(32))
+	dbg(stat(33))
+	dbg(stat(34))
+	dbg(stat(36))
 
 	if (btn(5)) log(tostr(t))
 

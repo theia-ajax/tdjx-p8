@@ -8,7 +8,7 @@ __lua__
 -- projects
 
 -----------------------------------
--- pico-8 game callbacks --
+-- main --
 -----------------------------------
 function _init()
 end
