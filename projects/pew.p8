@@ -93,8 +93,8 @@ function new_level()
 end
 
 function level_update(lvl)
-	if t % 30 == 0 and
-		game.enm_ct < 12
+	if t % 2 == 0 and
+		game.enm_ct < 0
 	then
 		for pt in all(lvl.spn_pts) do
 			new_enemy(pt.x, pt.y)
@@ -330,7 +330,7 @@ function ship_update(ship)
 		ship.dx -= ship.acl_x
 		ship.left = true
 	else
-		ship.dx = decay(ship.dx,
+		ship.dx = m.moveto(ship.dx, 0,
 			ship.dcl_x)
 	end
 
@@ -339,7 +339,7 @@ function ship_update(ship)
 	elseif btn(2) then
 		ship.dy -= ship.acl_y
 	else
-		ship.dy = decay(ship.dy,
+		ship.dy = m.moveto(ship.dy, 0,
 			ship.dcl_y)
 	end
 
@@ -354,20 +354,37 @@ function ship_update(ship)
 	local nx = ship.x + ship.dx
 	local ny = ship.y + ship.dy
 
-	if ship_solid(ship, ship.dx, 0)
+	local ect = 0
+	for e in all(enemies) do
+		if entity_overlap(ship, e)
+		then
+			ect += 1
+		end
+	end
+
+	ect = min(ect, 6)
+	local damp = 1 - (ect * 0.05)
+
+	local dx, dy =
+		ship.dx * damp,
+		ship.dy * damp + ect * 0.2
+
+	if ship_solid(ship, dx, 0)
 	then
 		-- ship.dx *= -0.5
 		ship.dx = 0
+		dx = 0
 	end
 
-	if ship_solid(ship, 0, ship.dy)
+	if ship_solid(ship, 0, dy)
 	then
 		-- ship.dy *= -0.5
 		ship.dy = 0
+		dy = 0
 	end
 
-	ship.x += ship.dx
-	ship.y += ship.dy
+	ship.x += dx
+	ship.y += dy
 
 	-- clamp top
 	if (ship.y < 0) ship.y = 0
@@ -408,7 +425,7 @@ function ship_update(ship)
 			b = new_bullet(bx,
 				ship.y + 2,
 				4,
-				sin(t / 180) * 0.2)
+				sin(t / 30) * 0.5)
 		end
 	else
 		ship.fire_del = 0
@@ -449,13 +466,14 @@ function new_enemy(x, y)
 	enm.dx = 0
 	enm.dy = 0
 	enm.spd = 0
-	enm.mx_spd = 0.4
-	enm.accel = 0.01
-	enm.mn_ang = 15
+	enm.mx_spd = 1.2
+	enm.accel = 0.02
+	enm.decel = 0.01
+	enm.mn_ang = 25
 	enm.spr = 48
 	enm.sprf = 8
 	enm.flash = 0
-	enm.health = 5
+	enm.health = 1
 
 	enm.on_death = function()
 		game.enm_ct -= 1
@@ -479,15 +497,16 @@ function enemy_update(enm)
 	local delx = ship.x - enm.x
 	local dely = ship.y - enm.y
 	enm.tg_rot = m.atan2(delx, dely)
-	enm.rot = m.lerp(enm.rot,
+	enm.rot = m.anglerp(enm.rot,
 		enm.tg_rot, 0.1)
 
-	local da = m.angle_diff(enm.tg_rot,
+	local da = m.dang(enm.tg_rot,
 		enm.rot)
 
 	if abs(da) > enm.mn_ang
 	then
-		enm.spd = 0
+		enm.spd = m.moveto(enm.spd, 0,
+			enm.decel)
 	else
 		enm.spd += enm.accel
 		enm.spd = m.clamp(enm.spd,
@@ -497,6 +516,8 @@ function enemy_update(enm)
 	enm.dx = m.cos(enm.rot) * enm.spd
 	enm.dy = m.sin(enm.rot) * enm.spd
 
+	-- nudge overlaping enemies
+	-- apart
 	local cx1, cy1 =
 		entity_center(enm)
 
@@ -507,18 +528,22 @@ function enemy_update(enm)
 				entity_center(e)
 
 			if m.dist2(cx1, cy1,
-				cx2, cy2) < 25
+				cx2, cy2) < 36
 			then
 				local delx, dely =
 					cx1 - cx2, cy1 - cy2
 				local l = m.mag(delx, dely)
-				delx /= l
-				dely /= l
-				if delx ~= 0 then
-					ngx = delx
-				end
-				if dely ~= 0 then
-					ngy = dely
+				if l > 0 then
+					delx /= l
+					dely /= l
+					if delx ~= 0 then
+						ngx = delx
+					end
+					if dely ~= 0 then
+						ngy = dely
+					end
+				else
+					ngx = -1
 				end
 			end
 		end
@@ -545,15 +570,37 @@ function enemy_update(enm)
 	enm.x += enm.dx + ngx
 	enm.y += enm.dy + ngy
 
+	if enm.y < -1000 then
+		err_log(ngx..","..ngy)
+	end
+
 	if (enm.flash > 0) enm.flash -= 1
 end
 
 function enemy_damage(enm, amt)
 	enm.health -= 1
 	if enm.health <= 0 then
-		enm.dead = true
+		enemy_kill(enm)
 	end
 	enm.flash = 5
+end
+
+function enemy_kill(enm)
+	enm.dead = true
+	local cx, cy = entity_center(enm)
+	for e in all(enemies) do
+		local cx2, cy2 = entity_center(
+			enm)
+		local d = m.dist(cx, cy,
+			cx2, cy2)
+		if d < 8 then
+			local fvx, fvy = m.norm(
+				cx2 - cx,
+				cy2 - cy)
+			e.dx += fvx * 5
+			e.dy += fvy * 5
+		end
+	end
 end
 
 function enemy_draw(enm)
@@ -567,10 +614,10 @@ function enemy_draw(enm)
 	spr(enm.spr, enm.x, enm.y)
 
 	local cx, cy = entity_center(enm)
-	line(cx, cy,
-		cx + m.cos(enm.rot) * 8,
-		cy + m.sin(enm.rot) * 8,
-		10)
+	-- line(cx, cy,
+	-- 	cx + m.cos(enm.rot) * 4,
+	-- 	cy + m.sin(enm.rot) * 4,
+	-- 	10)
 
 	pal()
 end
@@ -600,7 +647,8 @@ function cam_update(cam)
 		tar = lead + 4
 	end
 
-	cam.kx = decay(cam.kx, cam.kdx)
+	cam.kx = m.moveto(cam.kx, 0,
+		cam.kdx)
 
 	cam.tx = m.lerp(cam.tx, tar, 0.1)
 	cam.x = ship.x + cam.tx
@@ -644,8 +692,8 @@ function mngr_update(mngr)
 			end
 		end
 	end
-	fst_del(mngr, mngr.rem_q)
-	arr_clr(mngr.rem_q)
+	idelfa(mngr, mngr.rem_q)
+	clra(mngr.rem_q)
 end
 
 function mngr_draw(mngr)
@@ -653,11 +701,20 @@ function mngr_draw(mngr)
 end
 -----------------------------------
 
+-----------------------------------
+-- time --
+-----------------------------------
+t = 0
+tdel = 1
+
+function halt() tdel = 0 end
+function resume(d) tdel = d or 1 end
+-----------------------------------
+
+-----------------------------------
+-- main --
+-----------------------------------
 function _init()
-	t = 0
-
-	-- music(0)
-
 	game = {}
 	game.score = 0
 	game.high = 999
@@ -687,7 +744,16 @@ function _update60()
 
 	if (t % 4 == 0) game.score += 1
 
+	if tdel <= 0 or t % tdel ~= 0
+	then return end
+
 	err_update()
+	dbg_update()
+	log_update()
+
+	dbg("fps:"..tostr(stat(7)))
+
+	if (btn(5)) log(tostr(t))
 
 	level_update(level)
 
@@ -726,127 +792,13 @@ function _draw()
 	line(0, 121, 127, 121, 12)
 
 	err_draw()
+	dbg_draw()
+	log_draw()
 
-	prn_small(num_to_str(t),
+	prn_small(tostr(t),
 		2, 123)
-
-	print("fps:"..tostr(stat(7)),
-		0, 0, 11)
-
-	-- print("x:"..ship.x.." y:"..ship.y, 0, 0, 11)
 end
-
 -----------------------------------
--- math --
------------------------------------
-m = {}
-function m.lerp(a, b, t)
-	return a + (b - a) * t
-end
-
-function m.sin(deg)
-	return sin(deg / 360)
-end
-
-function m.cos(deg)
-	return cos(deg / 360)
-end
-
-function m.atan2(dx, dy)
-	return atan2(dx, dy) * 360
-end
-
-function m.angle_diff(a1, a2)
-	print(a1, 0, 8)
-	print(a2, 0, 16)
-	local a = a2 - a1
-	return m.mod((a + 180), 360) - 180
-end
-
-function m.mod(a, b)
-	return (a % b + b) % b
-end
-
-function m.clamp(v, low, high)
-	return max(min(v, high), low)
-end
-
-function m.dist(x1, y1, x2, y2)
-	return sqrt(m.dist2(x1, y1,
-		x2, y2))
-end
-
-function m.dist2(x1, y1, x2, y2)
-	return (x2 - x1) * (x2 - x1)
-		+ (y2 - y1) * (y2 - y1)
-end
-
-function m.mag(x, y)
-	return m.dist(0, 0, x, y)
-end
---------------------------------
-
-function fst_del(arr, idx)
-	local l = #arr
-
-	if type(idx) == "table" then
-		for i in all(idx) do
-			arr[i] = nil
-		end
-		if #idx == l then
-			return
-		end
-		for i = 1, l do
-			if arr[i] == nil then
-				while not arr[l]
-					and l > i do
-					l -= 1
-				end
-				if i ~= l then
-					arr[i] = arr[l]
-					arr[l] = nil
-				else
-					break
-				end
-			end
-		end
-	elseif type(idx) == "number" then
-		arr[idx] = nil
-		if l > idx then
-			arr[idx] = arr[l]
-			arr[l] = nil
-		end
-	end
-end
-
-function arr_clr(arr)
-	for i, _ in pairs(arr) do
-		arr[i] = nil
-	end
-end
-
-function move_to(v, f, dv)
-	if v < f then
-		v += dv
-		if v > f then v = f end
-	elseif v > f then
-		v -= dv
-		if v < f then v = f end
-	end
-	return v
-end
-
-function decay(v, dv, tg)
-	return move_to(v, tg or 0, dv)
-end
-
-function rnd_rng(l, h)
-	return l + rnd(h - l)
-end
-
-function rnd_rngi(l, h)
-	return flr(rnd_rng(l, h))
-end
 
 k_smfnt = {}
 k_smfnt["0"] = 64
@@ -880,19 +832,214 @@ function prn_small(digits, x, y, col)
 	pal()
 end
 
-function num_to_str(num)
-	if type(num) ~= "number" then
-		return ""
-	end
-	local ret = ""
-	if (num == 0) return "0"
-	while num > 0 do
-		ret = tostr(num % 10) .. ret
-		num = flr(num / 10)
-	end
-	return ret
+-----------------------------------
+-- _____  ___     _   _
+--  | |  | | \   | | \ \_/
+--  |_|  |_|_/ \_|_| /_/ \
+--  _    _____  _   _
+-- | | |  | |  | | | |
+-- \_\_/  |_|  |_| |_|__
+-----------------------------------
+-- tdjx stdlib
+--
+-----------------------------------
+-- math --
+-----------------------------------
+m = {}
+
+-- linear interpolation
+function m.lerp(a, b, t)
+	return a + (b - a) * t
 end
 
+function m.anglerp(a, b, t)
+	local ax, ay = m.dir(a)
+	local bx, by = m.dir(b)
+	return m.atan2(m.lerp(ax, bx, t),
+		m.lerp(ay, by, t))
+end
+
+-- sin but with degrees
+function m.sin(deg)
+	return sin(deg / 360)
+end
+
+-- cos but with degrees
+function m.cos(deg)
+	return cos(deg / 360)
+end
+
+-- atan2 in degrees
+function m.atan2(dx, dy)
+	return atan2(dx, dy) * 360
+end
+
+-- find delta angle between
+-- a1 and a2 in degrees
+function m.dang(a1, a2)
+	local a = a2 - a1
+	return m.mod((a + 180), 360) - 180
+end
+
+-- proper modulo that handles
+-- negatives appropriately
+function m.mod(a, b)
+	return (a % b + b) % b
+end
+
+-- clamp value v within boundaries
+-- low and high
+function m.clamp(v, low, high)
+	return max(min(v, high), low)
+end
+
+-- euclidean distance between
+-- points at x1,y1 and x2,y2
+function m.dist(x1, y1, x2, y2)
+	return sqrt(m.dist2(x1, y1,
+		x2, y2))
+end
+
+-- squared distance between
+-- points at x1,y1 and x2,y2
+-- avoids sqrt operation
+function m.dist2(x1, y1, x2, y2)
+	return (x2 - x1) * (x2 - x1)
+		+ (y2 - y1) * (y2 - y1)
+end
+
+-- magnitude of vector <x,y>
+function m.mag(x, y)
+	return m.dist(0, 0, x, y)
+end
+
+-- magnitude squared of <x,y>
+-- avoids sqrt operation
+function m.mag2(x, y)
+	return m.dist2(0, 0, x, y)
+end
+
+function m.norm(x, y)
+	local l = m.mag(x, y)
+	if l ~= 0 then
+		return x / l, y / l
+	else
+		return 0, 0
+	end
+end
+
+function m.dir(deg)
+	return m.cos(deg), m.sin(deg)
+end
+
+-- move value v towards f at rate
+-- dv but do not exceed f
+function m.moveto(v, f, dv)
+	if v < f then
+		v += dv
+		if v > f then v = f end
+	elseif v > f then
+		v -= dv
+		if v < f then v = f end
+	end
+	return v
+end
+
+-- random decimal value
+-- in range [l..h] (inclusive)
+function m.rndr(l, h)
+	return l + rnd(h - l)
+end
+
+-- random integer value
+-- in range [l..h] (inclusive)
+function m.rndri(l, h)
+	return flr(rnd_rng(l, h))
+end
+--------------------------------
+
+-----------------------------------
+-- table utilities --
+-----------------------------------
+-- clear array
+function clra(arr)
+	for i, _ in pairs(arr) do
+		arr[i] = nil
+	end
+end
+
+-- fast add, no check
+function fadd(t, v)
+	t[#t+1] = v
+end
+
+-- fast del, swap in last element
+-- instead of maintaining order
+function delf(t, v)
+	local n = #t
+	for i = 1, n do
+		if t[i] == v then
+			t[i] = t[n]
+			t[n] = nil
+			return true
+		end
+	end
+	return false
+end
+
+-- delete at index, maintain order
+function idel(t, i)
+	local n = #t
+	if i > 0 and i <= n then
+		for j = i, n - 1 do
+			t[j] = t[j + 1]
+		end
+		t[n] = nil
+		return true
+	end
+	return false
+end
+
+-- delete at index, swap in last
+-- element, loses ordering
+function idelf(t, i)
+	local n = #t
+	if i > 0 and i <= n then
+		t[i] = t[n]
+		t[n] = nil
+		return true
+	end
+	return false
+end
+
+-- fast deletion of an array of
+-- indices
+function idelfa(arr, idx)
+	local l = #arr
+
+	for i in all(idx) do
+		arr[i] = nil
+	end
+	if (#idx == l) return
+	for i = 1, l do
+		if arr[i] == nil then
+			while not arr[l]
+				and l > i
+			do
+				l -= 1
+			end
+			if i ~= l then
+				arr[i] = arr[l]
+				arr[l] = nil
+			else return end
+		end
+	end
+end
+-----------------------------------
+
+-----------------------------------
+-- logging --
+-----------------------------------
 err = {}
 err.dur = 120
 
@@ -911,12 +1058,62 @@ function err_update()
 end
 
 function err_draw()
-	local x, y = 0, 0
+	local y = 0
 	for e in all(err) do
+		local x = 64 - #e.msg * 2
 		print(e.msg, x, y, 8)
-		y += 9
+		y += 6
 	end
 end
+
+lg = {}
+lg.f = 0
+lg.max = 6
+
+function log(msg)
+	lg.f = 120
+	local n = #lg
+	if n >= lg.max then
+		idel(lg, 1)
+		lg[n] = msg
+	else
+		add(lg, msg)
+	end
+end
+
+function log_update()
+	if (lg.f > 0) lg.f -= 1
+end
+
+function log_draw()
+	if lg.f > 0 then
+		local y = 0
+		for m in all(lg) do
+			print(m, 127-#m*4, y, 7)
+			y += 6
+		end
+	end
+end
+
+dbglg = {}
+
+function dbg(msg)
+	add(dbglg, msg)
+end
+
+function dbg_update()
+	clra(dbglg)
+end
+
+function dbg_draw()
+	local y = 0
+	for d in all(dbglg) do
+		print(d, x, y, 11)
+		y += 7
+	end
+end
+-----------------------------------
+
 __gfx__
 000000000d0000000d000000000000000000000000000000000a770000099a700000499a00000099000000490000000400000000000000000000000000000000
 000000000dd000000dd0000000000000000000000aa700000aaa770004999aaa0000049a00000049000000040000000000000000000000000000000000000000
@@ -1092,11 +1289,11 @@ __map__
 1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111300000000002100000000000000000000000000000000000000000021000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111300000000000000000000000000000000000020000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1111111300000000000000001410150000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1111111300000000000000001211130000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1111111300000000000000001718160000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1111111300000000000000000000000000001415001415000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1111111300000000000000000000000000001716001716000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111300000000000000000000000000000000000000000000000000000000000000000012111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1106,11 +1303,11 @@ __map__
 1111111111111111111111111111111111111111111111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111111111111111111111111111111111111111111111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
-00020000031000310012100171001c1002110024100241002510025100221001e1001a100121000b1000810008100091000a1000b10035100351003510033100301002e1002b1002710001100031000010000100
-01100000047730777517775137751077313773177751377510773137751777513775107731377517773137750f7731277517773127750f7731277517773127730f7731277517775127730f773127731777312770
+01020000031000310012100171001c1002110024100241002510025100221001e1001a100121000b1000810008100091000a1000b10035100351003510033100301002e1002b1002710001100031000010000100
+01100000107751377517775137751077513775177751377510775137751777513775107751377517775137750f7751277517775127750f7751277517775127750f7751277517775127750f775127751777512775
 011000001c3751c3651c3551c345233752336523355233451e3751e3651e3551e3451f3751f3651f3551f3451b3751b3651b3551b345233752336523355233451e3751e3651e3551e3451b3751b3651b3551b345
-01100000346732836528355346432f3752f3652f6532f643366732a365366532a3452b6732b6632b3552b345336732736527355336432f3752f3652f6532f643366732a365366532a34533673273653365327345
-011000201e1751e1621e1521e14227175271622715227142231752316223152231421c1751c1621c1521c142231752316223152231421e1751e1621e1521e142271752716227152271421b1751b1621b1521b142
+01100000107731370517705137051077313705177051370510773137051770513705107731377317705137050f7731270517705127050f7731270517705127050f7731270517705127050f773127731770512705
+01100000107731370517705137051077313705177051370510773137051770513705107731377317705137050f7731270517705127050f7731270517705127050f7731270517705127050f773127731770512705
 011000000c0520c0520c0530c0551205212052120531205513052130521305313055120521205212053120530c0520c0520c0530c055120521205212053120551305213052130531305512052120521205312053
 0108002012452274001345225400124522240013452214021e3541e3561e2561e4561e4521e4521e4521e45512452274001345225400124522240013452214021b3541b3561b2561b4561b4521b4521b4521b455
 011800001e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f5501e5501f5501e4501f5501e5501f550234501f550
@@ -1120,8 +1317,8 @@ __sfx__
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 01100000101521415214155171521715518152181551b152181521815517152171551415214155101521015510152141521415517152171551815218155191521815218155171521715514152141551015210155
 __music__
-01 01424344
-00 01024644
-02 01034344
-02 01044344
+00 01434244
+00 01044344
+00 01044344
+03 01044244
 
