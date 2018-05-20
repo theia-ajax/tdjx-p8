@@ -64,6 +64,28 @@ function cell_calcnbrs(cell)
 	return n
 end
 
+-- set flag on
+function cell_sf(c, flg)
+	log(c.flags)
+	c.flags = sflg(c.flags, flg, true)
+end
+
+-- clear flag to off
+function cell_cf(c, flg)
+	c.flags = sflg(c.flags, flg, false)
+end
+
+-- toggle flag
+function cell_tf(c, flg)
+	c.flags = sflg(c.flags, flg,
+		not gflg(c.flags, flg))
+end
+
+-- get flag
+function cell_gf(c, flg)
+	return gflg(c.flags, flg)
+end
+
 function cell_snbrs(c, n)
 	n = band(n, 0xf)
 	n = shl(n, 4)
@@ -99,7 +121,8 @@ function board_fldrev(cx, cy)
 	local c = cell_fromcs(cx, cy)
 	if c and
 		not gflg(c.flags, k_revflg) and
-		not gflg(c.flags, k_mineflg)
+		not gflg(c.flags, k_mineflg) and
+		not cell_gf(c, k_flagflg)
 	then
 		c.flags = sflg(c.flags, k_revflg, true)
 		if cell_gnbrs(c) <= 0 then
@@ -118,13 +141,13 @@ end
 function board_reveal(cx, cy)
 	local c = cell_fromcs(cx, cy)
 	if c and
-		not gflg(c.flags, k_revflg) and
-		not gflg(c.flags, k_mineflg)
+		not cell_gf(c, k_revflg) and
+		not cell_gf(c, k_mineflg)
 	then
 		if cell_gnbrs(c) == 0 then
 			board_fldrev(cx, cy)
 		else
-			c.flags = sflg(c.flags, k_revflg, true)
+			cell_sf(c, k_revflg)
 		end
 	end
 end
@@ -152,17 +175,25 @@ function ct_flags()
 end
 
 function chk_win()
-	return ct_mines() == ct_flags()
+	if ct_mines() == ct_flags() then
+		gs = k_gswin
+		for c in all(board) do
+			if not cell_gf(c, k_mineflg)
+			then
+				cell_sf(c, k_revflg)
+			end
+		end
+	end
 end
 
 function on_mclick(btn)
 	if btn == 1 then
 		local cell = cell_fromws(mouse.x,
 			mouse.y)
-		if cell and not gflg(cell.flags, k_flagflg) then
-			cell.flags = sflg(cell.flags,
-				k_prsflg,
-				true)
+		if cell and
+			not cell_gf(cell, k_flagflg)
+		then
+			cell_sf(cell, k_prsflg)
 		end
 		lmbcell = cell
 	elseif btn == 2 then
@@ -182,14 +213,12 @@ function on_mrelease(btn)
 				mouse.x, mouse.y)
 			if cell and
 				cell == lmbcell and
-				not gflg(cell.flags, k_flagflg)
+				not cell_gf(cell, k_flagflg)
 			then
-				if not gflg(cell.flags, k_mineflg)
+				if not cell_gf(cell, k_mineflg)
 				then
 					board_reveal(cell.x, cell.y)
-					if chk_win() then
-						gs = k_gswin
-					end
+					chk_win()
 				else
 					gs = k_gsdead
 				end
@@ -205,14 +234,10 @@ function on_mrelease(btn)
 				mouse.x, mouse.y)
 			if cell and
 				cell == rmbcell and
-				not gflg(cell.flags, k_revflg)
+				not cell_gf(cell, k_revflg)
 			then
-				cell.flags = sflg(cell.flags,
-					k_flagflg,
-					not gflg(cell.flags, k_flagflg))
-				if chk_win() then
-					gs = k_gswin
-				end
+				cell_tf(cell, k_flagflg)
+				chk_win()
 			end
 			rmbcell = nil
 		end
@@ -240,8 +265,8 @@ function draw_bfld(bf, x, y, lz)
 end
 
 function cell_fromws(x, y)
-	x = flr((x - board.ox) / 8)
-	y = flr((y - board.oy) / 8)
+	x = flr((x - board.ox) / board.cw)
+	y = flr((y - board.oy) / board.ch)
 	return cell_fromcs(x, y)
 end
 
@@ -277,17 +302,15 @@ function pop_board()
 		board[i] = new_cell(x, y)
 	end
 
-	local mct = 10
+	local mct = board.mct
 	while mct > 0 do
 		local idx = -1
 		while not board[idx] or
-			gflg(board[idx].flags,
-				k_mineflg)
+			cell_gf(board[idx], k_mineflg)
 		do
 			idx = m.rndri(1, board.sz)
 		end
-		board[idx].flags = sflg(board[idx].flags,
-			k_mineflg, true)
+		cell_sf(board[idx], k_mineflg)
 		mct -= 1
 	end
 
@@ -297,6 +320,22 @@ function pop_board()
 		end
 	end
 end
+
+k_spr_sm = {}
+k_spr_sm["norm"] = 48
+k_spr_sm["prsd"] = 49
+k_spr_sm["rvld"] = 50
+k_spr_sm["mine"] = 51
+k_spr_sm["flag"] = 52
+k_spr_sm["nmst"] = 31
+
+k_spr_lg = {}
+k_spr_lg["norm"] = 1
+k_spr_lg["prsd"] = 2
+k_spr_lg["rvld"] = 3
+k_spr_lg["mine"] = 4
+k_spr_lg["flag"] = 6
+k_spr_lg["nmst"] = 15
 
 -----------------------------------
 -- main --
@@ -314,27 +353,34 @@ function _init()
 
 	gs = k_gsplay
 
-	-- cell states
-	-- number pair
-	--
-	-- first number, mine info
-	-- -1: mine
-	--  0: nothing
-	--  1-8: neighbor mine count
-	--
-	-- second number, bitfield
-	--  76543210
-	--
-	--  0 bit: 0 for up, 1 for pushed
-	--  1 bit: is revealed
-	--  2 bit: flagged
-
 	board = {}
-	board.ox = 24
-	board.oy = 24
-	board.w = 10
-	board.h = 10
+	board.w = 21
+	board.h = 19
+
+	board.w = min(board.w, 21)
+	board.h = min(board.h, 19)
+
 	board.sz = board.w * board.h
+
+	board.mct = 10
+	board.mct = min(board.mct, flr(board.sz * 0.7))
+
+	if board.w > 15 or
+		board.h > 14
+	then
+		board.big = false
+		board.cw = 6
+		board.ch = 6
+	else
+		board.big = true
+		board.cw = 8
+		board.ch = 8
+	end
+
+	local tw = board.w * board.cw
+	local th = board.h * board.ch
+	board.ox = (128 - tw) / 2
+	board.oy = (128 - th) / 2 + board.ch
 
 	pop_board()
 end
@@ -371,46 +417,49 @@ function _draw()
 		line(0, y, y, 0, c)
 	end
 
+	local spst = k_spr_lg
+	if not board.big then
+		spst = k_spr_sm
+	end
+
 	for cx = 0, board.w - 1 do
 		for cy = 0, board.h - 1 do
 			local idx = cy * board.w
 				+ cx + 1
 			local c = board[idx]
 
-			local x = cx * 8 + board.ox
-			local y = cy * 8 + board.oy
+			local x = cx * board.cw + board.ox
+			local y = cy * board.ch + board.oy
 
-			local pv = gflg(c.flags,
-				k_prsflg)
-			local rv = gflg(c.flags,
-				k_revflg)
-			local fv = gflg(c.flags,
-				k_flagflg)
-			local mv = gflg(c.flags,
-				k_mineflg)
+			local pv = cell_gf(c, k_prsflg)
+			local rv = cell_gf(c, k_revflg)
+			local fv = cell_gf(c, k_flagflg)
+			local mv = cell_gf(c, k_mineflg)
 
 			if rv then
-				spr(3, x, y)
+				spr(spst["rvld"], x, y)
 			elseif pv then
-				spr(2, x, y)
+				spr(spst["prsd"], x, y)
 			else
-				spr(1, x, y)
+				spr(spst["norm"], x, y)
 			end
 
 			if rv then
 				local nbrs = cell_gnbrs(c)
 				if not mv and nbrs > 0 then
-					spr(15 + nbrs,
+					spr(spst["nmst"] + nbrs,
 						x, y)
 				end
 			end
 
 			if fv then
-				spr(6, x, y)
+				spr(spst["flag"], x, y)
 			end
 
-			if mv and gs == k_gsdead then
-				spr(4, x, y)
+			if mv and
+				(gs == k_gsdead or btn(5))
+			then
+				spr(spst["mine"], x, y)
 			end
 		end
 	end
@@ -433,21 +482,19 @@ function _draw()
 		palt()
 	end
 
-	local cl = cell_fromws(mouse.x,
-		mouse.y)
-
-	if cl then
-		draw_bfld(cl.flags, 0, 0)
-		print(cl.x.." "..cl.y.." "..cl.y*board.w+cl.x+1, 0, 6)
-	end
-
+	palt(0, false)
+	rectfill(0, 0, 127, 7, 0)
+	line(0, 8, 127, 8, 7)
+	palt()
 	local mt = ct_mines()
 	local ft = ct_flags()
-	print(ft.."/"..mt, 0, 12, 7 )
+	spr(4, 119, 0)
+	local sstr = tostr(mt-ft)
+	print(sstr, 120-#sstr*4, 1, 7)
 
 	spr(5, mouse.x-3, mouse.y-3)
 
-	loggers_draw()
+	-- loggers_draw()
 end
 -----------------------------------
 
@@ -749,12 +796,13 @@ end
 __gfx__
 0000000077777777ddddddd6565656560000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000000007666666dd55555566555555505c00c500070000000040000000000000000000000000000000000000000000000000000000000000000000000000000
-007007007666666dd5555556555555560c5555c0c777c00000048800000000000000000000000000000000000000000000000000000000000000000000000000
+007007007666666dd5555556555555550c5555c0c777c00000048800000000000000000000000000000000000000000000000000000000000000000000000000
 000770007666666dd555555665555555005cc5000070000000048880000000000000000000000000000000000000000000000000000000000000000000000000
-000770007666666dd555555655555556005cc50000c0000000048800000000000000000000000000000000000000000000000000000000000000000000000000
+000770007666666dd555555655555555005cc50000c0000000048800000000000000000000000000000000000000000000000000000000000000000000000000
 007007007666666dd5555556655555550c5555c00000000000040000000000000000000000000000000000000000000000000000000000000000000000000000
-000000007666666dd55555565555555605c00c500000000000444000000000000000000000000000000000000000000000000000000000000000000000000000
-000000007ddddddd6666666665656565000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000007666666dd55555565555555505c00c500000000000444000000000000000000000000000000000000000000000000000000000000000000000000000
+000000007ddddddd6666666665555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000110000003300000888000000aa0000022220000bbb00000cccc00000ee0000000000000000000000000000000000000000000000000000000000000000000
 00001000003003000000080000a0a0000020000000b0000000000c0000e00e000000000000000000000000000000000000000000000000000000000000000000
@@ -762,3 +810,17 @@ __gfx__
 00001000000333000008800000aaaa000000020000bbbb000000c00000e00e000000000000000000000000000000000000000000000000000000000000000000
 0000100000300000000008000000a0000000020000b00b00000c000000e00e000000000000000000000000000000000000000000000000000000000000000000
 0011110000333300008880000000a0000022220000bbbb00000c0000000ee0000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0011000000333000008880000a0a00000022200000bbb00000ccc00000eee0000000000000000000000000000000000000000000000000000000000000000000
+0001000000003000000080000a0a00000020000000b000000000c00000e0e0000000000000000000000000000000000000000000000000000000000000000000
+0001000000330000000880000aaaa0000002200000bbb000000c000000eee0000000000000000000000000000000000000000000000000000000000000000000
+001110000033300000888000000a00000022200000bbb00000c0000000eee0000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+77777700dddddd005656560000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+76666d00d55556006555550005cc5000048000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+76666d00d5555600555555000c55c000048800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+76666d00d5555600655555000c55c000048880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+76666d00d55556005555550005cc5000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+7ddddd00d66666006555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
