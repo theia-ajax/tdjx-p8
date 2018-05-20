@@ -99,14 +99,19 @@ function board_fldrev(cx, cy)
 	local c = cell_fromcs(cx, cy)
 	if c and
 		not gflg(c.flags, k_revflg) and
-		not gflg(c.flags, k_mineflg) and
-		cell_gnbrs(c) < 2
+		not gflg(c.flags, k_mineflg)
 	then
 		c.flags = sflg(c.flags, k_revflg, true)
-		board_fldrev(cx-1, cy)
-		board_fldrev(cx+1, cy)
-		board_fldrev(cx, cy-1)
-		board_fldrev(cx, cy+1)
+		if cell_gnbrs(c) <= 0 then
+			board_fldrev(cx-1, cy)
+			board_fldrev(cx+1, cy)
+			board_fldrev(cx, cy-1)
+			board_fldrev(cx, cy+1)
+			board_fldrev(cx-1, cy-1)
+			board_fldrev(cx-1, cy+1)
+			board_fldrev(cx+1, cy-1)
+			board_fldrev(cx+1, cy+1)
+		end
 	end
 end
 
@@ -124,11 +129,37 @@ function board_reveal(cx, cy)
 	end
 end
 
+function ct_mines()
+	local sum = 0
+	for c in all(board) do
+		if gflg(c.flags, k_mineflg) then
+			sum += 1
+		end
+	end
+	return sum
+end
+
+function ct_flags()
+	local sum = 0
+	for c in all(board) do
+		if gflg(c.flags, k_mineflg) and
+			gflg(c.flags, k_flagflg)
+		then
+			sum += 1
+		end
+	end
+	return sum
+end
+
+function chk_win()
+	return ct_mines() == ct_flags()
+end
+
 function on_mclick(btn)
 	if btn == 1 then
 		local cell = cell_fromws(mouse.x,
 			mouse.y)
-		if cell then
+		if cell and not gflg(cell.flags, k_flagflg) then
 			cell.flags = sflg(cell.flags,
 				k_prsflg,
 				true)
@@ -143,32 +174,54 @@ function on_mclick(btn)
 end
 
 function on_mrelease(btn)
-	if btn == 1 then
-		local cell = cell_fromws(
-			mouse.x, mouse.y)
-		if cell and
-			cell == lmbcell
-		then
-			board_reveal(cell.x, cell.y)
+	local dead = false
+
+	if gs == k_gsplay then
+		if btn == 1 then
+			local cell = cell_fromws(
+				mouse.x, mouse.y)
+			if cell and
+				cell == lmbcell and
+				not gflg(cell.flags, k_flagflg)
+			then
+				if not gflg(cell.flags, k_mineflg)
+				then
+					board_reveal(cell.x, cell.y)
+					if chk_win() then
+						gs = k_gswin
+					end
+				else
+					gs = k_gsdead
+				end
+			end
+			if lmbcell then
+				lmbcell.flags = sflg(lmbcell.flags,
+					k_prsflg,
+					false)
+				lmbcell = nil
+			end
+		elseif btn == 2 then
+			local cell = cell_fromws(
+				mouse.x, mouse.y)
+			if cell and
+				cell == rmbcell and
+				not gflg(cell.flags, k_revflg)
+			then
+				cell.flags = sflg(cell.flags,
+					k_flagflg,
+					not gflg(cell.flags, k_flagflg))
+				if chk_win() then
+					gs = k_gswin
+				end
+			end
+			rmbcell = nil
 		end
-		if lmbcell then
-			lmbcell.flags = sflg(lmbcell.flags,
-				k_prsflg,
-				false)
-			lmbcell = nil
+	elseif gs == k_gsdead or
+		gs == k_gswin
+	then
+		if btn == 1 then
+			restart()
 		end
-	elseif btn == 2 then
-		local cell = cell_fromws(
-			mouse.x, mouse.y)
-		if cell and
-			cell == rmbcell
-			and not gflg(cell.flags, k_revflg)
-		then
-			cell.flags = sflg(cell.flags,
-				k_flagflg,
-				not gflg(cell.flags, k_flagflg))
-		end
-		rmbcell = nil
 	end
 end
 
@@ -207,6 +260,44 @@ function cell_fromcs(x, y)
 	end
 end
 
+k_gsplay = 1
+k_gsdead = 2
+k_gswin = 3
+
+function restart()
+	gs = k_gsplay
+	clra(board)
+	pop_board()
+end
+
+function pop_board()
+	for i = 1, board.sz do
+		local x = (i - 1) % board.w
+		local y = flr((i - 1) / board.w)
+		board[i] = new_cell(x, y)
+	end
+
+	local mct = 10
+	while mct > 0 do
+		local idx = -1
+		while not board[idx] or
+			gflg(board[idx].flags,
+				k_mineflg)
+		do
+			idx = m.rndri(1, board.sz)
+		end
+		board[idx].flags = sflg(board[idx].flags,
+			k_mineflg, true)
+		mct -= 1
+	end
+
+	for x = 0, board.w - 1 do
+		for y = 0, board.h - 1 do
+			cell_calcnbrs(cell_fromcs(x, y))
+		end
+	end
+end
+
 -----------------------------------
 -- main --
 -----------------------------------
@@ -220,6 +311,8 @@ function _init()
 	mouse.lbtn = 0
 	mouse.cx = 0
 	mouse.cy = 0
+
+	gs = k_gsplay
 
 	-- cell states
 	-- number pair
@@ -243,33 +336,7 @@ function _init()
 	board.h = 10
 	board.sz = board.w * board.h
 
-	for i = 1, board.sz do
-		local x = (i - 1) % board.w
-		local y = flr((i - 1) / board.w)
-		board[i] = new_cell(x, y)
-	end
-
-	local mct = 10
-	while mct > 0 do
-		local idx = -1
-		while not board[idx] or
-			gflg(board[idx].flags,
-				k_mineflg)
-		do
-			idx = m.rndri(1, board.sz)
-		end
-		-- err_log(idx)
-		board[idx].flags = sflg(board[idx].flags,
-			k_mineflg, true)
-		err_log(board[idx].flags)
-		mct -= 1
-	end
-
-	for x = 0, board.w - 1 do
-		for y = 0, board.h - 1 do
-			cell_calcnbrs(cell_fromcs(x, y))
-		end
-	end
+	pop_board()
 end
 
 function _update60()
@@ -297,9 +364,11 @@ end
 function _draw()
 	cls()
 
-	rect(0, 0, 127, 127, 1)
+	local c = 1
+	if (gs == k_gsdead) c = 8
+	rect(0, 0, 127, 127, c)
 	for y = 0, 256, 4 do
-		line(0, y, y, 0, 1)
+		line(0, y, y, 0, c)
 	end
 
 	for cx = 0, board.w - 1 do
@@ -339,7 +408,29 @@ function _draw()
 			if fv then
 				spr(6, x, y)
 			end
+
+			if mv and gs == k_gsdead then
+				spr(4, x, y)
+			end
 		end
+	end
+
+	if gs == k_gswin then
+		palt(15, true)
+		palt(0, false)
+		rectfill(64-16+1, 60+1, 64+14+1, 68+1, 0)
+		rectfill(64-16, 60, 64+14, 68, 0)
+		rect(64-16, 60, 64+14, 68, 7)
+		print("you win", 64-14, 62, 7)
+		palt()
+	elseif gs == k_gsdead then
+		palt(15, true)
+		palt(0, false)
+		rectfill(64-18+1, 60+1, 64+16+1, 68+1, 0)
+		rectfill(64-18, 60, 64+16, 68, 0)
+		rect(64-18, 60, 64+16, 68, 7)
+		print("you lose", 64-16, 62, 7)
+		palt()
 	end
 
 	local cl = cell_fromws(mouse.x,
@@ -349,6 +440,10 @@ function _draw()
 		draw_bfld(cl.flags, 0, 0)
 		print(cl.x.." "..cl.y.." "..cl.y*board.w+cl.x+1, 0, 6)
 	end
+
+	local mt = ct_mines()
+	local ft = ct_flags()
+	print(ft.."/"..mt, 0, 12, 7 )
 
 	spr(5, mouse.x-3, mouse.y-3)
 
@@ -487,7 +582,7 @@ end
 -----------------------------------
 -- clear array
 function clra(arr)
-	for i, _ in pairs(arr) do
+	for i = 1, #arr do
 		arr[i] = nil
 	end
 end
