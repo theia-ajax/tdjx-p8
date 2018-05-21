@@ -276,7 +276,7 @@ function splash_update()
 	end
 
 	if btn(4) or splt <= -120 then
-		gs_chg(k_gs_splash)
+		gs_chg(k_gs_play)
 	end
 
 	local i = 0
