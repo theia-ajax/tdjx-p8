@@ -1,24 +1,33 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
--- template.p8
+-- utiltest.p8
 -- tdjx
---
--- basic template, good for new
--- projects
 
------------------------------------
--- main --
------------------------------------
+function parr(lbl, arr)
+  local s = lbl..": ["
+  for i = 1, #arr do
+    s = s..arr[i]
+    if i < #arr then
+      s = s..","
+    end
+  end
+  s = s.."]"
+  print(s)
+end
+
 function _init()
-end
+  cls()
 
-function _update60()
-end
+  arr = { 1, 2, 3, 4, 5, 6 }
+  arr2 = cpya(arr)
+  parr("a1", arr, 0, 0)
+  idelr(arr, 2, 4)
+  parr("a1", arr, 0, 0)
+  parr("a2", arr2, 0, 0)
 
-function _draw()
+  flip()
 end
------------------------------------
 
 -----------------------------------
 -- _____  ___     _   _
