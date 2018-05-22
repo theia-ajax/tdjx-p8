@@ -388,9 +388,9 @@ function _init()
 	poke(0x5f2d, 1)
 
 	settings = {
-		w = 8,
-		h = 8,
-		mct = 10,
+		w = 16,
+		h = 16,
+		mct = 75,
 	}
 
 	mouse = {}
