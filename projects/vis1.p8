@@ -1,12 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
-t=0
-poke(24372,1)r,b=rnd,{}function a()add(b,{x=cos(t/90)*40+63,y=sin(t/30)*40+63,r=-9})end
-color(0x10c1.0f0f)
-::_::cls(1)
-t+=1
-if(t%8==0)a()
-for c in all(b) do c.r+=1
-if(c.r>60)del(b,c)
-for i=0,4 do circ(c.x,c.y,c.r+(i*min(-3+5*c.r/60,0)))end;end;flip()goto _
+b={}r=rnd
+function h()add(b,{x=r(128),y=r(128),r=-r(100)})end
+h()h()h()h()h()poke(24372,1)::_::cls(1)for c in all(b) do c.r+=1if(c.r>50)del(b,c)h()
+for i=0,4 do circ(c.x,c.y,c.r+min(i*(-3+c.r/12),0),0x10c1.0f0f-0x.0a05*flr(c.r/40))end;end;flip()goto _
