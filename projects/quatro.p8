@@ -55,6 +55,9 @@ function play_start()
 		g.brd.back[i] = g.brd[i]
 	end
 
+	g.pc_sav = nil
+	g.has_swp = false
+
 	g.pc_q = {}
 	for i = 1, 4 do
 		add(g.pc_q, rnd_pc())
@@ -63,6 +66,8 @@ function play_start()
 	g.actpc = next_pc()
 	g.dropitvl = 60
 	g.dropf = g.dropitvl
+
+	g.linect = 0
 end
 
 function play_update()
@@ -79,12 +84,47 @@ function play_update()
 			g.actpc.x -= 1
 		end
 
-		if btnprs(k_btn_o) and piece_rot_clear(g.actpc, g.brd, -1) then
-			g.actpc:decr()
-		end
+		local drx, dry = piece_drop_pos(g.actpc, g.brd)
+		board_writepc(g.brd, g.actpc, drx, dry, 'preview')
 
-		if btnprs(k_btn_x) and piece_rot_clear(g.actpc, g.brd, 1) then
-			g.actpc:incr()
+		if btn(k_btn_u) then
+			if btnprs(k_btn_o) then
+				while piece_clear_down(g.actpc, g.brd) do
+					g.actpc.y += 1
+				end
+				board_writepc(g.brd, g.actpc)
+				board_flip(g.brd)
+				local lns = board_chk_lines(g.brd)
+				g.linect += lns
+				g.actpc = next_pc()
+				g.has_swp = false
+			end
+
+			if btnprs(k_btn_x) then
+				if not g.has_swp then
+					g.has_swp = true
+					if g.pc_sav == nil then
+						g.pc_sav = new_piece(g.actpc.type)
+						g.actpc = next_pc()
+					else
+						local t = g.pc_sav.type
+						g.pc_sav = new_piece(g.actpc.type)
+						g.actpc = new_piece(t)
+					end
+				end
+			end
+		else
+			if btnprs(k_btn_o) and
+				piece_rot_clear(g.actpc, g.brd, -1)
+			then
+				g.actpc:decr()
+			end
+
+			if btnprs(k_btn_x) and
+				piece_rot_clear(g.actpc, g.brd, 1)
+			then
+				g.actpc:incr()
+			end
 		end
 
 		board_writepc(g.brd, g.actpc)
@@ -100,6 +140,7 @@ function play_update()
 				board_flip(g.brd)
 				board_chk_lines(g.brd)
 				g.actpc = next_pc()
+				g.has_swp = false
 			end
 		end
 	end
@@ -110,14 +151,26 @@ function play_draw()
 	for x = 0, 127 do
 		line(0, x, x, 127, 12)
 	end
-	for x = 0, 127 do
-		line(x, 0, 127, x, 13)
-	end
 
 	board_draw(g.brd, 10, 4, 6, 6)
-	board_draw(g.brd, 95, 10, 1, 1, 0)
+	board_draw(g.brd, 95, 95, 1, 1, 0)
 
 	piece_queue_draw(g.pc_q, 73, 3)
+
+	local savx, savy = 73, 88
+	print("save:", savx, savy, 6)
+	rectfill(savx, savy+6, savx + 19, savy + 36, 0)
+	rect(savx, savy+6, savx + 19, savy + 36, 7)
+
+	if g.pc_sav then
+		piece_draw(g.pc_sav, savx + 16 + k_piece_pvwoff[g.pc_sav.val] * 6, savy + 34, 6, 6, k_piece_pvwrot[g.pc_sav.val])
+	end
+
+	local lnx, lny = 95, 3
+	print("lines:", lnx, lny)
+	rectfill(lnx, lny + 6, lnx + 24, lny + 14, 0)
+	rect(lnx, lny + 6, lnx + 24, lny + 14, 7)
+	print(tostr(g.linect), lnx + 2, lny + 8)
 end
 -----------------------------------
 
@@ -142,6 +195,17 @@ function next_pc()
 	idel(g.pc_q, 1)
 	add(g.pc_q, rnd_pc())
 	return ret
+end
+
+k_style_names = {}
+
+k_style_vals = {
+	normal = 0,
+	preview = 1,
+}
+
+for s, v in pairs(k_style_vals) do
+	k_style_names[v] = s
 end
 
 k_pieces = { "i", "t", "l", "j", "s", "z", "o" }
@@ -311,6 +375,15 @@ function piece_clear_left(pc, brd)
 	return piece_move_clear(pc, brd, -1, 0)
 end
 
+function piece_drop_pos(pc, brd)
+	local d = 0
+	while piece_move_clear(pc, brd, 0, d)
+	do
+		d += 1
+	end
+	return pc.x, pc.y + d-1
+end
+
 function piece_draw(pc, x, y, cw, ch, r)
 	local ptn = pc:ptn(r or 1)
 
@@ -323,32 +396,40 @@ function piece_draw(pc, x, y, cw, ch, r)
 	end
 end
 
-function chunk_draw(col, x, y, w, h)
+function chunk_draw(col, x, y, w, h, style)
+	style = style or 'normal'
 	local x1, x2 = x, x + w - 1
 	local y1, y2 = y, y + h - 1
 	if col > 0 then
-		rectfill(x1, y1, x2, y2, col)
-		if w > 1 and h > 1 then
-			line(x1, y2, x2, y2, 7)
-			line(x2, y1, x2, y2, 7)
+		if style == "normal"
+		then
+			rectfill(x1, y1, x2, y2, col)
+			if w > 1 and h > 1 then
+				line(x1, y2, x2, y2, 7)
+				line(x2, y1, x2, y2, 7)
+			end
+			if w > 3 and h > 3 then
+				pset(x+1,y+1,7)
+				pset(x+1,y+2,7)
+				pset(x+2,y+1,7)
+			end
+			-- if h > 1 then
+			-- 	line(x1, y1, x2, y1, 7)
+			-- end
+			-- if w > 1 then
+			-- 	line(x2, y1+1, x2, y2, 6)
+			-- end
+			-- if h > 2 then
+			-- 	line(x1, y1 + 1, x1, y2, 5)
+			-- end
+			-- if w > 2 then
+			-- 	line(x1, y2, x2 - 1, y2, 5)
+			-- end
+		elseif style == "preview" then
+			fillp(0xa5a5)
+			rectfill(x1, y1, x2, y2, col)
+			fillp()
 		end
-		if w > 3 and h > 3 then
-			pset(x+1,y+1,7)
-			pset(x+1,y+2,7)
-			pset(x+2,y+1,7)
-		end
-		-- if h > 1 then
-		-- 	line(x1, y1, x2, y1, 7)
-		-- end
-		-- if w > 1 then
-		-- 	line(x2, y1+1, x2, y2, 6)
-		-- end
-		-- if h > 2 then
-		-- 	line(x1, y1 + 1, x1, y2, 5)
-		-- end
-		-- if w > 2 then
-		-- 	line(x1, y2, x2 - 1, y2, 5)
-		-- end
 	end
 end
 
@@ -389,6 +470,8 @@ function board_chk_lines(brd)
 	for ln in all(lines) do
 		board_clr_line(brd, ln)
 	end
+
+	return #lines
 end
 
 function board_clr_line(brd, ln)
@@ -405,24 +488,70 @@ function board_clr_line(brd, ln)
 end
 
 function board_xy_solid(brd, x, y)
-	local idx = y * brd.w + x
-	if idx < 0 or idx >= brd.sz then
-		return false
-	end
-	return brd.back[idx] > 0
+	return board_xy_val_back(brd, x, y) > 0
 end
 
-function board_writepc(brd, pc)
+function board_xy_idx(brd, x, y)
+	if x < 0 or x >= brd.w or y < 0 or y >= brd.h
+	then
+		return -1
+	else
+		return y * brd.w + x
+	end
+end
+
+function board_xy(brd, x, y)
+	local idx = board_xy_idx(brd, x, y)
+	if idx >= 0 then
+		return brd[idx]
+	else
+		return 0
+	end
+end
+
+function board_xy_back(brd, x, y)
+	local idx = board_xy_idx(brd, x, y)
+	if idx >= 0 then
+		return brd.back[idx]
+	else
+		return 0
+	end
+end
+
+function board_xy_val(brd, x, y)
+	return band(board_xy(brd, x, y),
+		0xf)
+end
+
+function board_xy_style(brd, x, y)
+	return shr(band(board_xy(brd, x, y), 0xf0), 4)
+end
+
+function board_xy_val_back(brd, x, y)
+	return band(board_xy_back(brd, x, y),
+		0xf)
+end
+
+function board_xy_style_back(brd, x, y)
+	return shr(band(board_xy_back(brd, x, y), 0xf0), 4)
+end
+
+function board_writepc(brd, pc, x, y, style)
 	local ptn = pc:ptn()
+	x = x or pc.x
+	y = y or pc.y
+	style = style or 'normal'
+	local styv = k_style_vals[style] or 0
 	for i = 1, 4 do
 		local xx, yy = ptn[i][1], ptn[i][2]
-		local px = pc.x + xx
-		local py = pc.y + yy
+		local px = x + xx
+		local py = y + yy
 		if px >= 0 and px < brd.w and
 			py >= 0 and py < brd.h
 		then
 			local idx = px + py * brd.w
-			brd[idx] = k_piece_vals[pc.type]
+			brd[idx] = k_piece_vals[pc.type] +
+				shl(styv, 4)
 		end
 	end
 end
@@ -443,12 +572,12 @@ function board_draw(brd, bx, by, cw, ch, sy, ey)
 
 	for r = sy, ey do
 		for c = sx, ex do
-			local idx = r * brd.w + c
-			local v = brd[idx]
+			local v = board_xy_val(brd, c, r)
+			local s = board_xy_style(brd, c, r)
 			local x, y = bx + c * cw,
 				by + (r - sy) * ch
 			chunk_draw(k_brd_cols[v+1],
-				x, y, cw, ch)
+				x, y, cw, ch, k_style_names[s])
 		end
 	end
 end
