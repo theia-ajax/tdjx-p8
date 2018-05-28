@@ -46,8 +46,8 @@ function play_start()
 	g.brd = {}
 	g.brd.back = {}
 	g.brd.w = 10
-	g.brd.h = 24
-	g.brd.ph = 4
+	g.brd.h = 22
+	g.brd.ph = 2
 	g.brd.sz = g.brd.w * g.brd.h
 
 	for i = 0, g.brd.sz - 1 do
@@ -56,7 +56,7 @@ function play_start()
 	end
 
 	g.pc_q = {}
-	for i = 1, 5 do
+	for i = 1, 4 do
 		add(g.pc_q, rnd_pc())
 	end
 
@@ -79,6 +79,14 @@ function play_update()
 			g.actpc.x -= 1
 		end
 
+		if btnprs(k_btn_o) and piece_rot_clear(g.actpc, g.brd, -1) then
+			g.actpc:decr()
+		end
+
+		if btnprs(k_btn_x) and piece_rot_clear(g.actpc, g.brd, 1) then
+			g.actpc:incr()
+		end
+
 		board_writepc(g.brd, g.actpc)
 
 		local rate = 1
@@ -90,6 +98,7 @@ function play_update()
 				g.actpc.y += 1
 			else
 				board_flip(g.brd)
+				board_chk_lines(g.brd)
 				g.actpc = next_pc()
 			end
 		end
@@ -101,21 +110,28 @@ function play_draw()
 	for x = 0, 127 do
 		line(0, x, x, 127, 12)
 	end
+	for x = 0, 127 do
+		line(x, 0, 127, x, 13)
+	end
 
 	board_draw(g.brd, 10, 4, 6, 6)
-	board_draw(g.brd, 74, 100, 1, 1, 0)
+	board_draw(g.brd, 95, 10, 1, 1, 0)
 
-	local qx, qy = 73, 3
-	print("next:", qx, qy, 6)
-	rectfill(qx, qy + 6, qx + 19, qy + 68, 0)
-	rect(qx, qy + 6, qx + 19, qy + 68, 7)
-
-	piece_draw(g.pc_q[1], qx + 4, qy + 8, 4, 4)
-	for i = 2, #g.pc_q do
-		piece_draw(g.pc_q[i], qx + 10, qy + 8 + 10 * i, 2, 2)
-	end
+	piece_queue_draw(g.pc_q, 73, 3)
 end
 -----------------------------------
+
+function piece_queue_draw(pcq, x, y)
+	local qx, qy = x, y
+	print("next:", qx, qy, 6)
+	rectfill(qx, qy + 6, qx + 19, qy + 80, 0)
+	rect(qx, qy + 6, qx + 19, qy + 80, 7)
+
+	piece_draw(pcq[1], qx + 16 + k_piece_pvwoff[pcq[1].val] * 6, qy + 34, 6, 6, k_piece_pvwrot[pcq[1].val])
+	for i = 2, #pcq do
+		piece_draw(pcq[i], qx + 16 + k_piece_pvwoff[pcq[i].val] * 3, qy + 26 + 13 * i, 3, 3, k_piece_pvwrot[pcq[i].val])
+	end
+end
 
 function rnd_pc()
 	return new_piece(k_pieces[flr(rnd(7))+1])
@@ -131,52 +147,43 @@ end
 k_pieces = { "i", "t", "l", "j", "s", "z", "o" }
 
 k_piece_i = {
-	0,1,0,0,
-	0,2,0,0,
-	0,1,0,0,
-	0,1,0,0,
+	{{0,0},{0,1},{0,-1},{0,-2}},
+	{{0,0},{1,0},{-1,0},{-2,0}},
 }
 
 k_piece_t = {
-	0,0,0,0,
-	1,2,1,0,
-	0,1,0,0,
-	0,0,0,0,
+	{{-1,0},{0,0},{1,0},{0,-1}},
+	{{0,-1},{0,0},{0,1},{1,0}},
+	{{1,0},{0,0},{-1,0},{0,1}},
+	{{0,1},{0,0},{0,-1},{-1,0}},
 }
 
 k_piece_l = {
-	0,1,0,0,
-	0,2,0,0,
-	0,1,1,0,
-	0,0,0,0,
+	{{0,0},{0,-1},{0,1},{1,1}},
+	{{0,0},{1,0},{-1,0},{-1,1}},
+	{{0,0},{0,1},{0,-1},{-1,-1}},
+	{{0,0},{-1,0},{1,0},{1,-1}},
 }
 
 k_piece_j = {
-	0,0,1,0,
-	0,0,2,0,
-	0,1,1,0,
-	0,0,0,0,
+	{{0,0},{0,-1},{0,1},{-1,1}},
+	{{0,0},{1,0},{-1,0},{-1,-1}},
+	{{0,0},{0,1},{0,-1},{1,-1}},
+	{{0,0},{-1,0},{1,0},{1,1}},
 }
 
 k_piece_s = {
-	0,0,0,0,
-	0,2,1,0,
-	1,1,0,0,
-	0,0,0,0,
+	{{0,0},{1,0},{0,1},{-1,1}},
+	{{0,0},{0,-1},{1,0},{1,1}},
 }
 
 k_piece_z = {
-	0,0,0,0,
-	1,2,0,0,
-	0,1,1,0,
-	0,0,0,0,
+	{{0,0},{-1,0},{0,1},{1,1}},
+	{{0,0},{0,1},{1,0},{1,-1}},
 }
 
 k_piece_o = {
-	0,0,0,0,
-	0,2,1,0,
-	0,1,1,0,
-	0,0,0,0,
+	{{-1,0},{0,0},{-1,1},{0,1}},
 }
 
 k_piece_ptns = {
@@ -190,13 +197,21 @@ k_piece_ptns = {
 }
 
 k_piece_vals = {
-	i = 1,
-	t = 2,
-	l = 3,
-	j = 4,
+	t = 1,
+	j = 2,
+	z = 3,
+	o = 4,
 	s = 5,
-	z = 6,
-	o = 7,
+	l = 6,
+	i = 7,
+}
+
+k_piece_pvwoff = {
+	0, 0, 0, 1, 0, 0, 0
+}
+
+k_piece_pvwrot = {
+	4, 1, 2, 1, 2, 3, 1
 }
 
 function cpy_ptn(t)
@@ -224,106 +239,87 @@ end
 function new_piece(t)
 	local self = {}
 
-	self.x = g.brd.w / 2
-	self.y = 1
-	self.r = 0
+	self.x = 5
+	self.y = 0
+	self.r = 1
 	self.type = t or "i"
+	self.val = k_piece_vals[self.type]
 
-	self.ptn = cpy_ptn(self.type)
-
-	self.pvtx = 0
-	self.pvty = 0
-
-	for i = 1, 16 do
-		if self.ptn[i] == 2 then
-			self.pvtx, self.pvty = (i - 1) % 4,
-				flr((i - 1) / 4)
-		end
+	self.incr = function(self)
+		self.r += 1
+		self.r %= #k_piece_ptns[self.type]
 	end
+
+	self.decr = function(self)
+		self.r -= 1
+		self.r = m.mod(self.r,
+			#k_piece_ptns[self.type])
+	end
+
+	self.ptn = function(self, dr)
+		dr = dr or 0
+		local r = m.mod((self.r + dr),
+		 #k_piece_ptns[self.type])
+		return k_piece_ptns[self.type][r+1]
+	end
+
 
 	return self
 end
 
-function piece_clear_down(pc, brd)
-	for c = 0, 3 do
-		local dwn = -1
-		for r = 3, 0, -1 do
-			local v = k_piece_ptns[pc.type][r*4+c+1]
-			if v > 0 then
-				dwn = r
-				break
-			end
-		end
-		if dwn >= 0 then
-			local chx = pc.x + c - pc.pvtx
-			local chy = pc.y + dwn - pc.pvty + 1
-			if chy >= brd.h or board_xy_solid(brd, chx, chy) then
-				return false
-			end
+function piece_rot_clear(pc, brd, dr)
+	local ptn = pc:ptn(dr)
+	for i = 1, 4 do
+		local xx, yy = ptn[i][1], ptn[i][2]
+		local nx, ny = pc.x + xx,
+			pc.y + yy
+		local idx = nx + ny * brd.w
+		if nx >= brd.w or nx < 0 or ny < 0 or
+			ny >= brd.h or brd.back[idx] > 0
+		then
+			return false
 		end
 	end
 	return true
+end
+
+function piece_move_clear(pc, brd, dx, dy)
+	local ptn = pc:ptn()
+	for i = 1, 4 do
+		local xx, yy = ptn[i][1], ptn[i][2]
+		local nx, ny = pc.x + xx + dx,
+			pc.y + yy + dy
+		local idx = nx + ny * brd.w
+		if nx >= brd.w or nx < 0 or ny < 0 or
+			ny >= brd.h or brd.back[idx] > 0
+		then
+			return false
+		end
+	end
+	return true
+end
+
+function piece_clear_down(pc, brd)
+	return piece_move_clear(pc, brd, 0, 1)
 end
 
 function piece_clear_right(pc, brd)
-	local ptn = k_piece_ptns[pc.type]
-	for r = 0, 3 do
-		local rt = -1
-		for c = 3, 0, -1 do
-			local v = ptn[r*4+c+1]
-			if v > 0 then
-				rt = c
-				break
-			end
-		end
-		if rt >= 0 then
-			local chx = pc.x + rt - pc.pvtx + 1
-			local chy = pc.y + r - pc.pvty
-			if chx >= brd.w or board_xy_solid(brd, chx, chy) then
-				return false
-			end
-		end
-	end
-	return true
+	return piece_move_clear(pc, brd, 1, 0)
 end
 
 function piece_clear_left(pc, brd)
-	local ptn = k_piece_ptns[pc.type]
-	for r = 0, 3 do
-		local lt = 999
-		for c = 0, 3 do
-			local v = ptn[r*4+c+1]
-			if v > 0 then
-				lt = c
-				break
-			end
-		end
-		if lt < 999 then
-			local chx = pc.x + lt - pc.pvtx - 1
-			local chy = pc.y + r - pc.pvty
-			if chx < 0 or board_xy_solid(brd, chx, chy) then
-				return false
-			end
-		end
-	end
-	return true
+	return piece_move_clear(pc, brd, -1, 0)
 end
 
-function piece_draw(pc, x, y, cw, ch)
-	local ptn = k_piece_ptns[pc.type]
+function piece_draw(pc, x, y, cw, ch, r)
+	local ptn = pc:ptn(r or 1)
 
-	local ct = 0
-	for r = 0, 3 do
-		for c = 0, 3 do
-			local v = ptn[r * 4 + c + 1]
-			if v > 0 then
-				ct += 1
-				local px, py = x + c * cw,
-					y + r * ch
-				chunk_draw(brd_col(pc.type), px, py, cw, ch)
-				if (ct > 5) return
-			end
-		end
+	for i = 1, 4 do
+		local xx = ptn[i][1] - 2
+		local yy = ptn[i][2] - 2
+		chunk_draw(brd_col(pc.type),
+			x + xx * cw, y + yy * ch,
+			cw, ch)
 	end
 end
 
@@ -332,18 +328,27 @@ function chunk_draw(col, x, y, w, h)
 	local y1, y2 = y, y + h - 1
 	if col > 0 then
 		rectfill(x1, y1, x2, y2, col)
-		if h > 1 then
-			line(x1, y1, x2, y1, 7)
+		if w > 1 and h > 1 then
+			line(x1, y2, x2, y2, 7)
+			line(x2, y1, x2, y2, 7)
 		end
-		if w > 1 then
-			line(x2, y1+1, x2, y2, 6)
+		if w > 3 and h > 3 then
+			pset(x+1,y+1,7)
+			pset(x+1,y+2,7)
+			pset(x+2,y+1,7)
 		end
-		if h > 2 then
-			line(x1, y1 + 1, x1, y2, 5)
-		end
-		if w > 2 then
-			line(x1, y2, x2 - 1, y2, 5)
-		end
+		-- if h > 1 then
+		-- 	line(x1, y1, x2, y1, 7)
+		-- end
+		-- if w > 1 then
+		-- 	line(x2, y1+1, x2, y2, 6)
+		-- end
+		-- if h > 2 then
+		-- 	line(x1, y1 + 1, x1, y2, 5)
+		-- end
+		-- if w > 2 then
+		-- 	line(x1, y2, x2 - 1, y2, 5)
+		-- end
 	end
 end
 
@@ -365,21 +370,59 @@ function board_flip(brd)
 	end
 end
 
+function board_chk_lines(brd)
+	local lines = {}
+	for r = 0, brd.h do
+		local fullln = true
+		for c = 0, brd.w - 1 do
+			if not board_xy_solid(brd, c, r)
+			then
+				fullln = false
+				break
+			end
+		end
+		if fullln then
+			add(lines, r)
+		end
+	end
+
+	for ln in all(lines) do
+		board_clr_line(brd, ln)
+	end
+end
+
+function board_clr_line(brd, ln)
+	for r = ln, 1, -1 do
+		for c = 0, brd.w - 1 do
+			local idx1 = r * brd.w + c
+			local idx2 = (r - 1) * brd.w + c
+			brd.back[idx1] = brd.back[idx2]
+		end
+	end
+	for c = 0, brd.w - 1 do
+		brd.back[c] = 0
+	end
+end
+
 function board_xy_solid(brd, x, y)
 	local idx = y * brd.w + x
-	if idx < 1 or idx >= brd.sz then
+	if idx < 0 or idx >= brd.sz then
 		return false
 	end
 	return brd.back[idx] > 0
 end
 
 function board_writepc(brd, pc)
-	local px, py = pc.pvtx, pc.pvty
-	for i = 0, 15 do
-		local x = pc.x + i % 4 - px
-		local y = pc.y + flr(i / 4) - py
-		if pc.ptn[i + 1] > 0 then
-			brd[x + brd.w * y] = k_piece_vals[pc.type]
+	local ptn = pc:ptn()
+	for i = 1, 4 do
+		local xx, yy = ptn[i][1], ptn[i][2]
+		local px = pc.x + xx
+		local py = pc.y + yy
+		if px >= 0 and px < brd.w and
+			py >= 0 and py < brd.h
+		then
+			local idx = px + py * brd.w
+			brd[idx] = k_piece_vals[pc.type]
 		end
 	end
 end
