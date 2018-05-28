@@ -29,6 +29,8 @@ function _update60()
 		return
 	end
 
+	loggers_update()
+
 	btnupdate()
 
 	gs_update()
@@ -36,6 +38,7 @@ end
 
 function _draw()
 	gs_draw()
+	loggers_draw()
 end
 
 function play_start()
@@ -52,8 +55,13 @@ function play_start()
 		g.brd.back[i] = g.brd[i]
 	end
 
-	g.actpc = new_piece()
-	g.dropitvl = 2
+	g.pc_q = {}
+	for i = 1, 5 do
+		add(g.pc_q, rnd_pc())
+	end
+
+	g.actpc = next_pc()
+	g.dropitvl = 60
 	g.dropf = g.dropitvl
 end
 
@@ -63,19 +71,26 @@ function play_update()
 	end
 
 	if g.actpc then
+		if btnprs(k_btn_r) and piece_clear_right(g.actpc, g.brd) then
+			g.actpc.x += 1
+		end
+
+		if btnprs(k_btn_l) and piece_clear_left(g.actpc, g.brd) then
+			g.actpc.x -= 1
+		end
+
 		board_writepc(g.brd, g.actpc)
 
-		g.dropf -= 1
+		local rate = 1
+		if (btn(3)) rate = 20
+		g.dropf -= rate
 		if g.dropf <= 0 then
-			local botx, boty = g.actpc:bottom()
-			if boty < g.brd.h then
+			if piece_clear_down(g.actpc, g.brd) then
 				g.dropf = g.dropitvl
 				g.actpc.y += 1
 			else
-				g.actpc = new_piece(k_pieces[flr(rnd(7))+1])
-				for i = 0, g.brd.sz - 1 do
-					g.brd.back[i] = g.brd[i]
-				end
+				board_flip(g.brd)
+				g.actpc = next_pc()
 			end
 		end
 	end
@@ -88,12 +103,30 @@ function play_draw()
 	end
 
 	board_draw(g.brd, 10, 4, 6, 6)
-	board_draw(g.brd, 80, 4, 2, 2, 0)
+	board_draw(g.brd, 74, 100, 1, 1, 0)
 
-	local px, py = g.actpc:pv()
-	print(px..","..py, 0, 0, 7)
+	local qx, qy = 73, 3
+	print("next:", qx, qy, 6)
+	rectfill(qx, qy + 6, qx + 19, qy + 68, 0)
+	rect(qx, qy + 6, qx + 19, qy + 68, 7)
+
+	piece_draw(g.pc_q[1], qx + 4, qy + 8, 4, 4)
+	for i = 2, #g.pc_q do
+		piece_draw(g.pc_q[i], qx + 10, qy + 8 + 10 * i, 2, 2)
+	end
 end
 -----------------------------------
+
+function rnd_pc()
+	return new_piece(k_pieces[flr(rnd(7))+1])
+end
+
+function next_pc()
+	local ret = g.pc_q[1]
+	idel(g.pc_q, 1)
+	add(g.pc_q, rnd_pc())
+	return ret
+end
 
 k_pieces = { "i", "t", "l", "j", "s", "z", "o" }
 
@@ -119,9 +152,9 @@ k_piece_l = {
 }
 
 k_piece_j = {
-	0,1,0,0,
-	0,2,0,0,
-	1,1,0,0,
+	0,0,1,0,
+	0,0,2,0,
+	0,1,1,0,
 	0,0,0,0,
 }
 
@@ -191,39 +224,134 @@ end
 function new_piece(t)
 	local self = {}
 
-	self.x = g.brd.w / 2 - 1
+	self.x = g.brd.w / 2
 	self.y = 1
 	self.r = 0
 	self.type = t or "i"
 
 	self.ptn = cpy_ptn(self.type)
 
-	self.pv = function(self)
-		for i = 1, 16 do
-			if self.ptn[i] == 2 then
-				return (i - 1) % 4,
-					flr((i - 1) / 4)
-			end
-		end
-		return 0, 0
-	end
+	self.pvtx = 0
+	self.pvty = 0
 
-	self.bottom = function(self)
-		local px, py = ptn_bottom(self.ptn)
-		return self.x + px, self.y + py
+	for i = 1, 16 do
+		if self.ptn[i] == 2 then
+			self.pvtx, self.pvty = (i - 1) % 4,
+				flr((i - 1) / 4)
+		end
 	end
 
 	return self
 end
 
+function piece_clear_down(pc, brd)
+	for c = 0, 3 do
+		local dwn = -1
+		for r = 3, 0, -1 do
+			local v = k_piece_ptns[pc.type][r*4+c+1]
+			if v > 0 then
+				dwn = r
+				break
+			end
+		end
+		if dwn >= 0 then
+			local chx = pc.x + c - pc.pvtx
+			local chy = pc.y + dwn - pc.pvty + 1
+			if chy >= brd.h or board_xy_solid(brd, chx, chy) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function piece_clear_right(pc, brd)
+	local ptn = k_piece_ptns[pc.type]
+	for r = 0, 3 do
+		local rt = -1
+		for c = 3, 0, -1 do
+			local v = ptn[r*4+c+1]
+			if v > 0 then
+				rt = c
+				break
+			end
+		end
+		if rt >= 0 then
+			local chx = pc.x + rt - pc.pvtx + 1
+			local chy = pc.y + r - pc.pvty
+			if chx >= brd.w or board_xy_solid(brd, chx, chy) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function piece_clear_left(pc, brd)
+	local ptn = k_piece_ptns[pc.type]
+	for r = 0, 3 do
+		local lt = 999
+		for c = 0, 3 do
+			local v = ptn[r*4+c+1]
+			if v > 0 then
+				lt = c
+				break
+			end
+		end
+		if lt < 999 then
+			local chx = pc.x + lt - pc.pvtx - 1
+			local chy = pc.y + r - pc.pvty
+			if chx < 0 or board_xy_solid(brd, chx, chy) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function piece_draw(pc, x, y, cw, ch)
+	local ptn = k_piece_ptns[pc.type]
+
+	local ct = 0
+	for r = 0, 3 do
+		for c = 0, 3 do
+			local v = ptn[r * 4 + c + 1]
+			if v > 0 then
+				ct += 1
+				local px, py = x + c * cw,
+					y + r * ch
+				chunk_draw(brd_col(pc.type), px, py, cw, ch)
+				if (ct > 5) return
+			end
+		end
+	end
+end
+
+function chunk_draw(col, x, y, w, h)
+	local x1, x2 = x, x + w - 1
+	local y1, y2 = y, y + h - 1
+	if col > 0 then
+		rectfill(x1, y1, x2, y2, col)
+		if h > 1 then
+			line(x1, y1, x2, y1, 7)
+		end
+		if w > 1 then
+			line(x2, y1+1, x2, y2, 6)
+		end
+		if h > 2 then
+			line(x1, y1 + 1, x1, y2, 5)
+		end
+		if w > 2 then
+			line(x1, y2, x2 - 1, y2, 5)
+		end
+	end
+end
+
 k_brd_cols = { 0, 8, 9, 10, 14, 3, 1, 2 }
 
-k_btn_l = 0
-k_btn_r = 1
-k_btn_u = 2
-k_btn_d = 3
-k_btn_o = 4
-k_btn_x = 5
+function brd_col(pt)
+	return k_brd_cols[k_piece_vals[pt]+1]
+end
 
 function board_refresh(brd)
 	for i = 0, brd.brd.sz - 1 do
@@ -232,13 +360,21 @@ function board_refresh(brd)
 end
 
 function board_flip(brd)
-	for i = 0, brd.brd.sz - 1 do
+	for i = 0, brd.sz - 1 do
 		brd.back[i] = brd[i]
 	end
 end
 
+function board_xy_solid(brd, x, y)
+	local idx = y * brd.w + x
+	if idx < 1 or idx >= brd.sz then
+		return false
+	end
+	return brd.back[idx] > 0
+end
+
 function board_writepc(brd, pc)
-	local px, py = pc:pv()
+	local px, py = pc.pvtx, pc.pvty
 	for i = 0, 15 do
 		local x = pc.x + i % 4 - px
 		local y = pc.y + flr(i / 4) - py
@@ -257,8 +393,9 @@ function board_draw(brd, bx, by, cw, ch, sy, ey)
 	bw = brd.w * cw
 	bh = (brd.h - sy) * ch
 
+	rectfill(bx, by, bx + bw, by + bh, 0)
 	rect(bx - 1, by - 1,
-		bx + bw + 1, by + bh + 1,
+		bx + bw, by + bh,
 		7)
 
 	for r = sy, ey do
@@ -267,10 +404,18 @@ function board_draw(brd, bx, by, cw, ch, sy, ey)
 			local v = brd[idx]
 			local x, y = bx + c * cw,
 				by + (r - sy) * ch
-			rectfill(x, y, x+cw, y+ch, k_brd_cols[v+1])
+			chunk_draw(k_brd_cols[v+1],
+				x, y, cw, ch)
 		end
 	end
 end
+
+k_btn_l = 0
+k_btn_r = 1
+k_btn_u = 2
+k_btn_d = 3
+k_btn_o = 4
+k_btn_x = 5
 
 btns = {}
 prevbtns = {}
@@ -303,112 +448,112 @@ m = {}
 
 -- linear interpolation
 function m.lerp(a, b, t)
-    return a + (b - a) * t
+	return a + (b - a) * t
 end
 
 function m.anglerp(a, b, t)
-    local ax, ay = m.dir(a)
-    local bx, by = m.dir(b)
-    return m.atan2(m.lerp(ax, bx, t),
-        m.lerp(ay, by, t))
+	local ax, ay = m.dir(a)
+	local bx, by = m.dir(b)
+	return m.atan2(m.lerp(ax, bx, t),
+		m.lerp(ay, by, t))
 end
 
 -- sin but with degrees
 function m.sin(deg)
-    return sin(deg / 360)
+	return sin(deg / 360)
 end
 
 -- cos but with degrees
 function m.cos(deg)
-    return cos(deg / 360)
+	return cos(deg / 360)
 end
 
 -- atan2 in degrees
 function m.atan2(dx, dy)
-    return atan2(dx, dy) * 360
+	return atan2(dx, dy) * 360
 end
 
 -- find delta angle between
 -- a1 and a2 in degrees
 function m.dang(a1, a2)
-    local a = a2 - a1
-    return m.mod((a + 180), 360) - 180
+	local a = a2 - a1
+	return m.mod((a + 180), 360) - 180
 end
 
 -- proper modulo that handles
 -- negatives appropriately
 function m.mod(a, b)
-    return (a % b + b) % b
+	return (a % b + b) % b
 end
 
 -- clamp value v within boundaries
 -- low and high
 function m.clamp(v, low, high)
-    return max(min(v, high), low)
+	return max(min(v, high), low)
 end
 
 -- euclidean distance between
 -- points at x1,y1 and x2,y2
 function m.dist(x1, y1, x2, y2)
-    return sqrt(m.dist2(x1, y1,
-        x2, y2))
+	return sqrt(m.dist2(x1, y1,
+		x2, y2))
 end
 
 -- squared distance between
 -- points at x1,y1 and x2,y2
 -- avoids sqrt operation
 function m.dist2(x1, y1, x2, y2)
-    return (x2 - x1) * (x2 - x1)
-        + (y2 - y1) * (y2 - y1)
+	return (x2 - x1) * (x2 - x1)
+		+ (y2 - y1) * (y2 - y1)
 end
 
 -- magnitude of vector <x,y>
 function m.mag(x, y)
-    return m.dist(0, 0, x, y)
+	return m.dist(0, 0, x, y)
 end
 
 -- magnitude squared of <x,y>
 -- avoids sqrt operation
 function m.mag2(x, y)
-    return m.dist2(0, 0, x, y)
+	return m.dist2(0, 0, x, y)
 end
 
 function m.norm(x, y)
-    local l = m.mag(x, y)
-    if l ~= 0 then
-        return x / l, y / l
-    else
-        return 0, 0
-    end
+	local l = m.mag(x, y)
+	if l ~= 0 then
+		return x / l, y / l
+	else
+		return 0, 0
+	end
 end
 
 function m.dir(deg)
-    return m.cos(deg), m.sin(deg)
+	return m.cos(deg), m.sin(deg)
 end
 
 -- move value v towards f at rate
 -- dv but do not exceed f
 function m.moveto(v, f, dv)
-    if v < f then
-        v += dv
-        if v > f then v = f end
-    elseif v > f then
-        v -= dv
-        if v < f then v = f end
-    end
-    return v
+	if v < f then
+		v += dv
+		if v > f then v = f end
+	elseif v > f then
+		v -= dv
+		if v < f then v = f end
+	end
+	return v
 end
 
 -- random decimal value
 -- in range [l..h] (inclusive)
 function m.rndr(l, h)
-    return l + rnd(h - l)
+	return l + rnd(h - l)
 end
 
 -- random integer value
 -- in range [l..h] (inclusive)
 function m.rndri(l, h)
-    return flr(m.rndr(l, h))
+	return flr(m.rndr(l, h))
 end
 --------------------------------
 
@@ -417,118 +562,118 @@ end
 -----------------------------------
 -- clear array
 function clra(arr)
-    for i, _ in pairs(arr) do
-        arr[i] = nil
-    end
+	for i, _ in pairs(arr) do
+		arr[i] = nil
+	end
 end
 
 function cpya(arr, dst)
-  if dst then
-    clra(dst)
-  else
-    dst = {}
-  end
-  for i = 1, #arr do
-    dst[i] = arr[i]
-  end
-  return dst
+	if dst then
+		clra(dst)
+	else
+		dst = {}
+	end
+	for i = 1, #arr do
+		dst[i] = arr[i]
+	end
+	return dst
 end
 
 function idxof(arr, v)
-    local n = #arr
-    for i = 1, n do
-        if arr[n] == v then
-            return i
-        end
-    end
-    return -1
+	local n = #arr
+	for i = 1, n do
+		if arr[n] == v then
+			return i
+		end
+	end
+	return -1
 end
 
 function contains(arr, v)
-    return idxof(arr, v) >= 0
+	return idxof(arr, v) >= 0
 end
 
 -- fast add, no check
 function fadd(t, v)
-    t[#t+1] = v
+	t[#t+1] = v
 end
 
 -- fast del, swap in last element
 -- instead of maintaining order
 function delf(t, v)
-    local n = #t
-    for i = 1, n do
-        if t[i] == v then
-            t[i] = t[n]
-            t[n] = nil
-            return true
-        end
-    end
-    return false
+	local n = #t
+	for i = 1, n do
+		if t[i] == v then
+			t[i] = t[n]
+			t[n] = nil
+			return true
+		end
+	end
+	return false
 end
 
 -- delete at index, maintain order
 function idel(t, i)
-    local n = #t
-    if i > 0 and i <= n then
-        for j = i, n - 1 do
-            t[j] = t[j + 1]
-        end
-        t[n] = nil
-        return true
-    end
-    return false
+	local n = #t
+	if i > 0 and i <= n then
+		for j = i, n - 1 do
+			t[j] = t[j + 1]
+		end
+		t[n] = nil
+		return true
+	end
+	return false
 end
 
 -- delete [s, e], maintain order
 -- compress for space
 function idelr(t, s, e)
-    local n = #t
-    e = min(n, e)
-    local d = e - s + 1
-    for i = s, e do
-        t[i] = nil
-    end
-    for i = e + 1, n do
-        t[i - d] = t[i]
-        t[i] = nil
-    end
+	local n = #t
+	e = min(n, e)
+	local d = e - s + 1
+	for i = s, e do
+		t[i] = nil
+	end
+	for i = e + 1, n do
+		t[i - d] = t[i]
+		t[i] = nil
+	end
 end
 
 -- delete at index, swap in last
 -- element, loses ordering
 function idelf(t, i)
-    local n = #t
-    if i > 0 and i <= n then
-        t[i] = t[n]
-        t[n] = nil
-        return true
-    end
-    return false
+	local n = #t
+	if i > 0 and i <= n then
+		t[i] = t[n]
+		t[n] = nil
+		return true
+	end
+	return false
 end
 
 -- fast deletion of an array of
 -- indices
 function idelfa(arr, idx)
-    local l = #arr
+	local l = #arr
 
-    for i in all(idx) do
-        arr[i] = nil
-    end
-    if (#idx == l) return
-    for i = 1, l do
-        if arr[i] == nil then
-            while not arr[l]
-                and l > i
-            do
-                l -= 1
-            end
-            if i ~= l then
-                arr[i] = arr[l]
-                arr[l] = nil
-            else return end
-        end
-    end
+	for i in all(idx) do
+		arr[i] = nil
+	end
+	if (#idx == l) return
+	for i = 1, l do
+		if arr[i] == nil then
+			while not arr[l]
+				and l > i
+			do
+				l -= 1
+			end
+			if i ~= l then
+				arr[i] = arr[l]
+				arr[l] = nil
+			else return end
+		end
+	end
 end
 -----------------------------------
 
@@ -539,73 +684,89 @@ err = {}
 err.dur = 120
 
 function err_log(msg)
-    add(err, { msg = msg,
-        f = err.dur })
+	add(err, { msg = tostr(msg) or 'nil',
+		f = err.dur })
 end
 
 function err_update()
-    for e in all(err) do
-        e.f -= 1
-        if e.f <= 0 then
-            del(err, e)
-        end
-    end
+	for e in all(err) do
+		e.f -= 1
+		if e.f <= 0 then
+			del(err, e)
+		end
+	end
 end
 
 function err_draw()
-    local y = 0
-    for e in all(err) do
-        local x = 64 - #e.msg * 2
-        print(e.msg, x, y, 8)
-        y += 6
-    end
+	local y = 0
+	for e in all(err) do
+		local len = 0
+		if (e.msg) len = #e.msg
+		local x = 64 - len * 2
+		print(e.msg, x, y, 8)
+		y += 6
+	end
 end
 
 lg = {}
 lg.f = 0
-lg.max = 6
+lg.max = 16
 
 function log(msg)
-    lg.f = 120
-    local n = #lg
-    if n >= lg.max then
-        idel(lg, 1)
-        lg[n] = msg
-    else
-        add(lg, msg)
-    end
+	msg = tostr(msg) or 'nil'
+	msg = "t "..tf..": "..msg
+	lg.f = 120
+	local n = #lg
+	if n >= lg.max then
+		idel(lg, 1)
+		lg[n] = msg
+	else
+		add(lg, msg)
+	end
 end
 
 function log_update()
-    if (lg.f > 0) lg.f -= 1
+		if (lg.f > 0) lg.f -= 1
 end
 
 function log_draw()
-    if lg.f > 0 then
-        local y = 0
-        for m in all(lg) do
-            print(m, 127-#m*4, y, 7)
-            y += 6
-        end
-    end
+	if lg.f > 0 then
+		local y = 0
+		for m in all(lg) do
+			print(m, 127-#m*4, y, 7)
+			y += 6
+		end
+	end
 end
 
 dbglg = {}
 
 function dbg(msg)
-    add(dbglg, msg)
+	add(dbglg, msg or 'nil')
 end
 
 function dbg_update()
-    clra(dbglg)
+	clra(dbglg)
 end
 
 function dbg_draw()
-    local y = 0
-    for d in all(dbglg) do
-        print(d, x, y, 11)
-        y += 7
-    end
+	local y = 0
+	for d in all(dbglg) do
+		print(d, x, y, 11)
+		y += 7
+	end
+end
+
+function loggers_update()
+	err_update()
+	log_update()
+	dbg_update()
+end
+
+function loggers_draw()
+	err_draw()
+	log_draw()
+	dbg_draw()
 end
 -----------------------------------
 
