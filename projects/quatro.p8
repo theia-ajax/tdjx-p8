@@ -170,7 +170,8 @@ function play_draw()
 	print("lines:", lnx, lny)
 	rectfill(lnx, lny + 6, lnx + 24, lny + 14, 0)
 	rect(lnx, lny + 6, lnx + 24, lny + 14, 7)
-	print(tostr(g.linect), lnx + 2, lny + 8)
+	local ctstr = tostr(g.linect)
+	print(ctstr, lnx + 24 - #ctstr * 4, lny + 8)
 end
 -----------------------------------
 
