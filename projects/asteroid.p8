@@ -128,14 +128,14 @@ function plr_draw(plr)
 	line(plr.lx, plr.ly, plr.rx, plr.ry, 7)
 end
 
-function ast_new(x, y, sz)
+function ast_new(x, y, sz, dx, dy)
 	local ast = {}
 	
-	ast.x = rnd(127)
-	ast.y = rnd(127)
+	ast.x = x or rnd(127)
+	ast.y = x or rnd(127)
 	ast.sz = sz or 7
-	ast.dx = (rnd(2)-1) * 0.25
-	ast.dy = (rnd(2)-1) * 0.25
+	ast.dx = dx or (rnd(2)-1) * 0.25
+	ast.dy = dy or (rnd(2)-1) * 0.25
 	ast.dead = false
 	
 	return ast
@@ -181,11 +181,16 @@ function blt_update(blt)
 		if d <= a.sz then
 			a.dead = true
 			blt.dead = true
-			if a.sz > 1 then
+			local px, py = m.norm(-blt.dy, blt.dx)
+			px *= 0.2
+			py *= 0.2
+			if a.sz > 3 then
 				add(gm.asts,
-					ast_new(a.x, a.y, a.sz - 2))
+					ast_new(a.x, a.y,
+						a.sz - 2, px, py))
 				add(gm.asts,
-					ast_new(a.x, a.y, a.sz - 2))
+					ast_new(a.x, a.y,
+						a.sz - 2, -px, -py))
 			end
 			break
 		end
@@ -219,6 +224,19 @@ function m.scr_wrap(x, y, b)
 	if (y < -b) y = 127 + b
 	if (y > 127 + b) y = -b
 	return x, y
+end
+
+function m.len(x, y)
+	return sqrt(x*x, y*y)
+end
+
+function m.norm(x, y)
+	local l = m.len(x, y)
+	if l ~= 0 then
+		return x / l, y / l
+	else
+		return 0, 0
+	end
 end
 
 -----------------------------------
