@@ -1,11 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
--- template.p8
+-- die
 -- tdjx
-
--- basic template, good for new
--- projects
 
 -----------------------------------
 -- main --
@@ -23,7 +20,7 @@ function _init()
 		play_update,
 		play_draw,
 		play_start)
-	gs_chg(k_gs_splash)
+	gs_chg(k_gs_play)
 end
 
 function _update60()
