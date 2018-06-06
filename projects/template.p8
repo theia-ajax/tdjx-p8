@@ -49,12 +49,13 @@ end
 
 function play_update()
 	cam_update(g.cam)
-
 end
 
 function play_draw()
 	cls()
 	camera(cam_pos(g.cam))
+
+	map(0, 0, 0, 0, 16, 16)
 end
 -----------------------------------
 
