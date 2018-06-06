@@ -8,7 +8,9 @@ function _init()
 	for x = 1, -1, -2 do
 		for y = 1, -1, -2 do
 			for z = 1, -1, -2 do
-				add(pt,{x=x*hs,y=y*hs,z=z*hs})
+				local p = vec(x*hs,y*hs,z*hs)
+				p.c = vec()
+				add(pt,p)
 			end
 		end
 	end
@@ -28,7 +30,11 @@ function _init()
 		6,5,7,
 		6,7,8,
 		1,3,5,
-		3,7,5
+		3,7,5,
+		1,6,5,
+		1,2,6,
+		3,8,7,
+		8,4,3
 	}
 
 	cam = {x=0,y=0,z=2}
@@ -45,55 +51,93 @@ end
 function _draw()
 	cls()
 
-	for p in all(pt) do
-		p.cx,p.cz=rot(p.x,p.z,t()/4)
-		p.cy=p.y
-		p.cx+=cam.x
-		p.cy+=cam.y
-		p.cz+=cam.z
+	draw_mesh(cam, pt, idx, 6)
+	draw_mesh_wire(cam, pt, idx, 11)
+end
+
+function draw_mesh_wire(cam, vts, idx, col)
+	color(col)
+
+	mat = mx_new()
+	tr = mx_trans(0, 0, ((sin(t()/4)+1)/2)*4+1)
+	rot = mx_mul(mx_rotx(t()/8), mx_roty(t()/4))
+	-- rot = mx_roty(t()/4)
+	mx_mul(tr, rot, mat)
+
+	for v in all(vts) do
+		tform(v, mat, v.c)
 	end
 
+	for i = 1, #idx, 3 do
+		local v1,v2,v3=vts[idx[i]],
+			vts[idx[i+1]],
+			vts[idx[i+2]]
 
-	for i=1,#idx,3 do
-		local p1,p2,p3=
-			pt[idx[i]],
-			pt[idx[i+1]],
-			pt[idx[i+2]]
-
-		local leg1 = {x=p2.cx-p1.cx,y=p2.cy-p1.cy,z=p2.cz-p1.cz}
-		local leg2 = {x=p3.cx-p1.cx,y=p3.cy-p1.cy,z=p3.cz-p1.cz}
+		local leg1 = {x=v2.c.x-v1.c.x,y=v2.c.y-v1.c.y,z=v2.c.z-v1.c.z}
+		local leg2 = {x=v3.c.x-v1.c.x,y=v3.c.y-v1.c.y,z=v3.c.z-v1.c.z}
 		norm(leg1)
 		norm(leg2)
 		local n = cross(leg1, leg2)
-		local cdiff = {x=cam.x-p1.cx,y=cam.y-p1.cy,z=cam.z-p1.cz}
+		local cdiff = {x=cam.x-v1.c.x,y=cam.y-v1.c.y,z=cam.z-v1.c.z}
 		norm(cdiff)
 		local d = dot(n, cdiff)
 
-		if d > 0 then
-			sx1 = 64+64*p1.cx/p1.cz
-			sy1 = 64+64*p1.cy/p1.cz
+		if d > 0 or true then
+			sx1 = 64+64*v1.c.x/v1.c.z
+			sy1 = 64+64*v1.c.y/v1.c.z
 
-			sx2 = 64+64*p2.cx/p2.cz
-			sy2 = 64+64*p2.cy/p2.cz
+			sx2 = 64+64*v2.c.x/v2.c.z
+			sy2 = 64+64*v2.c.y/v2.c.z
 
-			sx3 = 64+64*p3.cx/p3.cz
-			sy3 = 64+64*p3.cy/p3.cz
+			sx3 = 64+64*v3.c.x/v3.c.z
+			sy3 = 64+64*v3.c.y/v3.c.z
 
-			tri(sx1,sy1,sx2,sy2,sx3,sy3,7)
+			line(sx1,sy1,sx2,sy2)
+			line(sx1,sy1,sx3,sy3)
+			line(sx2,sy2,sx3,sy3)
 		end
 	end
+end
 
-	for i=1,#lidx,2 do
-		local p1,p2=pt[lidx[i]],
-			pt[lidx[i+1]]
+function draw_mesh(cam, vts, idx, col)
+	color(col)
 
-		sx1 = 64+64*p1.cx/p1.cz
-		sy1 = 64+64*p1.cy/p1.cz
+	mat = mx_new()
+	tr = mx_trans(0, 0, ((sin(t()/4)+1)/2)*4+1)
+	rot = mx_mul(mx_rotx(t()/8), mx_roty(t()/4))
+	-- rot = mx_roty(t()/4)
+	mx_mul(tr, rot, mat)
 
-		sx2 = 64+64*p2.cx/p2.cz
-		sy2 = 64+64*p2.cy/p2.cz
+	for v in all(vts) do
+		tform(v, mat, v.c)
+	end
 
-		line(sx1,sy1,sx2,sy2,11)
+	for i=1,#idx,3 do
+		local v1,v2,v3=vts[idx[i]],
+			vts[idx[i+1]],
+			vts[idx[i+2]]
+
+		local leg1 = {x=v2.c.x-v1.c.x,y=v2.c.y-v1.c.y,z=v2.c.z-v1.c.z}
+		local leg2 = {x=v3.c.x-v1.c.x,y=v3.c.y-v1.c.y,z=v3.c.z-v1.c.z}
+		norm(leg1)
+		norm(leg2)
+		local n = cross(leg1, leg2)
+		local cdiff = {x=cam.x-v1.c.x,y=cam.y-v1.c.y,z=cam.z-v1.c.z}
+		norm(cdiff)
+		local d = dot(n, cdiff)
+
+		if d > 0 or true then
+			sx1 = 64+64*v1.c.x/v1.c.z
+			sy1 = 64+64*v1.c.y/v1.c.z
+
+			sx2 = 64+64*v2.c.x/v2.c.z
+			sy2 = 64+64*v2.c.y/v2.c.z
+
+			sx3 = 64+64*v3.c.x/v3.c.z
+			sy3 = 64+64*v3.c.y/v3.c.z
+
+			tri(sx1,sy1,sx2,sy2,sx3,sy3)
+		end
 	end
 end
 
@@ -231,4 +275,113 @@ end
 
 function dot(a, b)
 	return a.x*b.x+a.y*b.y+a.z*b.z
+end
+
+function vec(x, y, z)
+	return {
+		x = x or 0, y = y or 0, z = z or 0
+	}
+end
+
+function tform(v, mx, out)
+	out = out or {}
+
+	out.x = v.x*mx[1] + v.y*mx[2] + v.z*mx[3] + mx[4]
+	out.y = v.x*mx[5] + v.y*mx[6] + v.z*mx[7] + mx[8]
+	out.z = v.x*mx[9] + v.y*mx[10] + v.z*mx[11] + mx[12]
+	out.w = v.x*mx[13] + v.y*mx[13] + v.z*mx[14] + mx[15]
+
+	return out
+end
+
+k_mx_idt = { 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+function mx_new(out)
+	out = out or {}
+	for i=1,16 do out[i]=k_mx_idt[i] end
+
+	out.g = function(self, r, c)
+		return self[(r-1)*4+c]
+	end
+
+	out.s = function(self, r, c, v)
+		self[(r-1)*4+c] = v
+	end
+
+	return out
+end
+
+function mx_mul(a, b, out)
+	out = out or mx_new()
+
+	out:s(1, 1, a:g(1,1)*b:g(1,1)+a:g(1,2)*b:g(2,1)+a:g(1,3)*b:g(3,1)+a:g(1,4)*b:g(4,1))
+	out:s(1, 2, a:g(1,1)*b:g(1,2)+a:g(1,2)*b:g(2,2)+a:g(1,3)*b:g(3,2)+a:g(1,4)*b:g(4,2))
+	out:s(1, 3, a:g(1,1)*b:g(1,3)+a:g(1,2)*b:g(2,3)+a:g(1,3)*b:g(3,3)+a:g(1,4)*b:g(4,3))
+	out:s(1, 4, a:g(1,1)*b:g(1,4)+a:g(1,2)*b:g(2,4)+a:g(1,3)*b:g(3,4)+a:g(1,4)*b:g(4,4))
+
+	out:s(2, 1, a:g(2,1)*b:g(1,1)+a:g(2,2)*b:g(2,1)+a:g(2,3)*b:g(3,1)+a:g(2,4)*b:g(4,1))
+	out:s(2, 2, a:g(2,1)*b:g(1,2)+a:g(2,2)*b:g(2,2)+a:g(2,3)*b:g(3,2)+a:g(2,4)*b:g(4,2))
+	out:s(2, 3, a:g(2,1)*b:g(1,3)+a:g(2,2)*b:g(2,3)+a:g(2,3)*b:g(3,3)+a:g(2,4)*b:g(4,3))
+	out:s(2, 4, a:g(2,1)*b:g(1,4)+a:g(2,2)*b:g(2,4)+a:g(2,3)*b:g(3,4)+a:g(2,4)*b:g(4,4))
+
+	out:s(3, 1, a:g(3,1)*b:g(1,1)+a:g(3,2)*b:g(2,1)+a:g(3,3)*b:g(3,1)+a:g(3,4)*b:g(4,1))
+	out:s(3, 2, a:g(3,1)*b:g(1,2)+a:g(3,2)*b:g(2,2)+a:g(3,3)*b:g(3,2)+a:g(3,4)*b:g(4,2))
+	out:s(3, 3, a:g(3,1)*b:g(1,3)+a:g(3,2)*b:g(2,3)+a:g(3,3)*b:g(3,3)+a:g(3,4)*b:g(4,3))
+	out:s(3, 4, a:g(3,1)*b:g(1,4)+a:g(3,2)*b:g(2,4)+a:g(3,3)*b:g(3,4)+a:g(3,4)*b:g(4,4))
+
+	out:s(4, 1, a:g(4,1)*b:g(1,1)+a:g(4,2)*b:g(2,1)+a:g(4,3)*b:g(3,1)+a:g(4,4)*b:g(4,1))
+	out:s(4, 2, a:g(4,1)*b:g(1,2)+a:g(4,2)*b:g(2,2)+a:g(4,3)*b:g(3,2)+a:g(4,4)*b:g(4,2))
+	out:s(4, 3, a:g(4,1)*b:g(1,3)+a:g(4,2)*b:g(2,3)+a:g(4,3)*b:g(3,3)+a:g(4,4)*b:g(4,3))
+	out:s(4, 4, a:g(4,1)*b:g(1,4)+a:g(4,2)*b:g(2,4)+a:g(4,3)*b:g(3,4)+a:g(4,4)*b:g(4,4))
+
+	return out
+end
+
+function mx_trans(tx, ty, tz, out)
+	out = out or mx_new()
+	out:s(1, 4, tx)
+	out:s(2, 4, ty)
+	out:s(3, 4, tz)
+	return out
+end
+
+function mx_scale(sx, sy, sz, out)
+	out = out or mx_new()
+	out:s(1, 1, sx)
+	out:s(2, 2, sx)
+	out:s(3, 3, sx)
+	return out
+end
+
+function mx_rotx(a, out)
+	out = out or mx_new(out)
+	out:s(2, 2, cos(a))
+	out:s(2, 3, -sin(a))
+	out:s(3, 2, sin(a))
+	out:s(3, 3, cos(a))
+	return out
+end
+
+function mx_roty(a, out)
+	out = out or mx_new(out)
+	out:s(1, 1, cos(a))
+	out:s(1, 3, -sin(a))
+	out:s(3, 1, sin(a))
+	out:s(3, 3, cos(a))
+	return out
+end
+
+function mx_rotz(a, out)
+	out = out or mx_new(out)
+	out:s(1, 1, cos(a))
+	out:s(1, 2, -sin(a))
+	out:s(2, 1, sin(a))
+	out:s(2, 2, cos(a))
+	return out
+end
+
+function mx_tostr(m)
+	return "["..m:g(1,1).." "..m:g(1,2).." "..m:g(1,3).." "..m:g(1,4).."\n"..
+				 " "..m:g(2,1).." "..m:g(2,2).." "..m:g(2,3).." "..m:g(2,4).."\n"..
+				 " "..m:g(3,1).." "..m:g(3,2).." "..m:g(3,3).." "..m:g(3,4).."\n"..
+				 " "..m:g(4,1).." "..m:g(4,2).." "..m:g(4,3).." "..m:g(4,4).."]"
 end
