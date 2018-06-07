@@ -3,13 +3,14 @@ version 16
 __lua__
 l={10,9,8,2,1}
 ::_::
-cls()srand()for m=0,99 do
-x=rnd(8)-4
-z=rnd(8)-4
+cls()srand()for m=0,300 do
+y=rnd()w=rnd(3)+2
+x=cos(y)*w
+z=sin(y)*w
 y=rnd(14)-7
-for n=4,0,-1 do
+b=rnd(1)
+for n=0,4 do
 a=t()/4+n*.01
-b=t()/4+(n+1)*.01
 c=cos(a)*x-sin(a)*z
 d=sin(a)*x+cos(a)*z+7
 g=64+(c*64)/d
