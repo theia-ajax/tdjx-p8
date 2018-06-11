@@ -1,0 +1,503 @@
+pico-8 cartridge // http://www.pico-8.com
+version 16
+__lua__
+function _init()
+	entities={}
+	entities.rq={}
+
+	plr=new_plr(64,64)
+
+	lvl={}
+	lvl.spts={}
+	for x=0,15 do
+		for y=0,15 do
+			local sum=fget(mget(x,y))+
+				fget(mget(x+1,y))+
+				fget(mget(x-1,y))+
+				fget(mget(x,y-1))+
+				fget(mget(x,y+1))
+			if sum==0 then
+				local wx,wy=x*8+3,y*8+3
+				add(lvl.spts,{x=wx,y=wy})
+			end
+		end
+	end
+	
+	add(entities,plr)
+	
+	function rnd_spwn(lvl)
+		local n=#lvl.spts
+		local pt=
+			lvl.spts[flr(rnd(n))+1]
+		return pt.x,pt.y
+	end
+	
+	for i=1,5 do
+		local spx,spy=rnd_spwn(lvl)
+		add(entities,new_enm(spx,spy))
+	end
+end
+
+function _update()
+	-- iterate over all entities
+	-- if entities have update fn
+	-- run the update fn
+	-- then
+	-- if the destroy flag is true
+	-- add index to remove queue
+	for i=1,#entities do
+		local ent=entities[i]
+		ent:update()
+		if ent.destroy then
+			add(entities.rq,i)
+		end
+	end
+	
+	-- remove all entities at
+	-- indices in the remove queue
+	idelfa(entities,entities.rq)
+	-- clear the remove queue
+	clra(entities.rq)
+end
+
+function _draw()
+	cls()
+	fillp()
+	
+	for x=0,15 do
+		for y=0,15 do
+			wx=x*8+4
+			wy=y*8+4
+			dlx=wx-plr.x
+			dly=wy-plr.y
+			nx,ny=norm(dlx,dly)
+			pdx,pdy=angdir(plr.r)
+			th=dot(pdx,pdy,nx,ny)
+			d=sqrt(dlx*dlx+dly*dly)
+			if d<plr.ltr and th>0.7 then
+				sp=mget(x,y)
+				if sp>0 then
+					lt=d/plr.ltr
+				 lidx=flr(lt*lt*4)
+				 if(th<0.9)lidx+=1
+				 if(th<0.8)lidx+=1
+				 lidx=min(lidx,3)
+					spr(sp+lidx,wx-4,wy-4)
+				end
+			end
+		end
+	end
+	
+	for ent in all(entities) do
+		ent:draw()
+	end
+end
+
+
+function new_plr(x,y)
+	local plr=ent()
+	plr.x=x or 64
+	plr.y=y or 64
+	plr.r=0
+	plr.dx=0
+	plr.dy=0
+	plr.ltr=14*8
+	
+	plr.spd=1
+	plr.turnspd_move=0.02
+	plr.turnspd_aim=0.005
+	
+	plr.armtf=24
+	plr.armf=0
+	plr.loadmx=6
+	plr.ammoload=plr.loadmx
+	plr.reloadtf=30
+	plr.reloadf=0
+	
+	plr.arming=function(plr)
+		return plr.armf>0
+	end
+	
+	plr.armed=function(plr)
+		return plr.armf>=plr.armtf
+	end
+	
+	plr.update=plr_update
+	plr.draw=plr_draw
+	return plr
+end
+
+function plr_update(plr)
+	if btn(5) then
+		plr.armf+=1
+	 plr.armf=min(plr.armf,
+	 	plr.armtf)
+	else
+		plr.armf=0
+		plr.reloadf=0
+	end
+	
+	if plr:arming() and
+		plr.ammoload==0
+	then
+		plr.reloadf+=1
+		if plr.reloadf>=plr.reloadtf
+		then
+			plr.ammoload=plr.loadmx
+			plr.reloadf=0
+		end
+	end
+	
+	if plr:armed() then
+		if btn(4) and plr.ammoload>0
+		then
+			-- shoot
+			plr.ammoload-=1
+			plr.armf=0
+		end
+	end
+
+	local rv=plr.turnspd_move
+	if plr:arming() then
+		rv=plr.turnspd_aim
+	end
+
+	if(btn(0)) plr.r+=rv
+	if(btn(1)) plr.r-=rv
+
+	local spd=0
+	if btn(2) and
+		not plr:arming()
+	then
+		spd=plr.spd
+	end
+	
+	plr.dx=cos(plr.r)
+	plr.dy=sin(plr.r)
+	plr.vx=plr.dx*spd
+	plr.vy=plr.dy*spd
+
+	if circ_solid(plr.x+plr.vx,
+		plr.y,4)
+	then
+		plr.vx=0
+	end
+	
+	if circ_solid(plr.x,
+		plr.y+plr.vy,4)
+	then
+		plr.vy=0
+	end
+
+	plr.x+=plr.vx
+	plr.y+=plr.vy
+end
+
+function plr_draw(plr)
+	circ(plr.x,plr.y,4,11)
+	line(plr.x,plr.y,
+		plr.x+plr.dx*4,
+		plr.y+plr.dy*4,11)
+		
+	if plr:armed() then
+		line(plr.x+plr.dx*4,
+			plr.y+plr.dy*4,
+			plr.x+plr.dx*127,
+			plr.y+plr.dy*127,8)
+	end
+	if plr:arming() then
+		local af=plr.armf/plr.armtf
+		local hx=plr.x-7
+		local hy=plr.y+3
+		line(hx,hy,hx,hy-af*6,7)
+		
+		if plr.ammoload>0 then
+ 		local lf=
+ 			plr.ammoload/plr.loadmx
+ 		local lx=plr.x+7
+ 		local ly=plr.y+3
+ 		line(lx,ly,lx,ly-lf*6,7)
+ 	end
+		
+		if plr.reloadf>0 then
+ 		local rf=
+ 			plr.reloadf/plr.reloadtf
+ 		local rx=hx
+ 		local ry=plr.y+6
+ 		line(rx,ry,rx+rf*14,ry,7)
+ 	end
+	end
+end
+
+function new_enm(x,y)
+	local enm=ent()
+	enm.x=x or 64
+	enm.y=y or 64
+	enm.r=0
+	enm.dx=0
+	enm.dy=0
+	enm.update=enm_update
+	enm.draw=enm_draw
+	return enm
+end
+
+function enm_update(enm)
+	enm.r=atan2(plr.x-enm.x,
+		plr.y-enm.y)
+		
+	enm.dx=cos(enm.r)
+	enm.dy=sin(enm.r)
+	enm.vx=enm.dx*.2
+	enm.vy=enm.dy*.2
+
+	if circ_solid(enm.x+enm.vx,
+		enm.y,4)
+	then
+		enm.vx=0
+	end
+	
+	if circ_solid(enm.x,
+		enm.y+enm.vy,4)
+	then
+		enm.vy=0
+	end
+	
+	enm.x+=enm.vx
+	enm.y+=enm.vy
+end
+
+function enm_draw(enm)
+	dlx=enm.x-plr.x
+	dly=enm.y-plr.y
+	nx,ny=norm(dlx,dly)
+	pdx,pdy=angdir(plr.r)
+	th=dot(pdx,pdy,nx,ny)
+	d=sqrt(dlx*dlx+dly*dly)
+	if d<plr.ltr and th>0.7 then
+		circfill(enm.x,enm.y,4,1)
+	end
+end
+
+function
+circ_overlap(x1,y1,r1,x2,y2,r2)
+	local dx,dy=x2-x1,y2-y1
+	local d=sqrt(dx*dx+dy*dy)
+	return d<=r1+r2
+end
+
+function circ_solid(x,y,r)
+	local seg=8
+	for i=0,seg-1 do
+		if pt_solid(x+cos(i/seg)*r,
+			y+sin(i/seg)*r)
+		then
+			return true
+		end
+	end
+	return false
+end
+
+function pt_solid(x,y)
+	cx=flr(x/8)
+	cy=flr(y/8)
+	return fget(mget(cx,cy),0)
+end
+
+function mag(x,y)
+	return sqrt(x*x+y*y)
+end
+
+function norm(x,y)
+	local l = mag(x,y)
+	if(l>0)return x/l,y/l
+	return 0,0
+end
+
+function dot(x1,y1,x2,y2)
+	return x1*x2+y1*y2
+end
+
+function angdir(ang)
+	return cos(ang),sin(ang)
+end
+
+-----------------------------------
+-- table utilities --
+-----------------------------------
+-- clear array
+function clra(arr)
+	for i, _ in pairs(arr) do
+		arr[i] = nil
+	end
+end
+
+function cpya(arr, dst)
+	if dst then
+		clra(dst)
+	else
+		dst = {}
+	end
+	for i = 1, #arr do
+		dst[i] = arr[i]
+	end
+	return dst
+end
+
+function idxof(arr, v)
+	local n = #arr
+	for i = 1, n do
+		if arr[n] == v then
+			return i
+		end
+	end
+	return -1
+end
+
+function contains(arr, v)
+	return idxof(arr, v) >= 0
+end
+
+-- fast add, no check
+function fadd(t, v)
+	t[#t+1] = v
+end
+
+-- fast del, swap in last element
+-- instead of maintaining order
+function delf(t, v)
+	local n = #t
+	for i = 1, n do
+		if t[i] == v then
+			t[i] = t[n]
+			t[n] = nil
+			return true
+		end
+	end
+	return false
+end
+
+-- delete at index, maintain order
+function idel(t, i)
+	local n = #t
+	if i > 0 and i <= n then
+		for j = i, n - 1 do
+			t[j] = t[j + 1]
+		end
+		t[n] = nil
+		return true
+	end
+	return false
+end
+
+-- delete [s, e], maintain order
+-- compress for space
+function idelr(t, s, e)
+	local n = #t
+	e = min(n, e)
+	local d = e - s + 1
+	for i = s, e do
+		t[i] = nil
+	end
+	for i = e + 1, n do
+		t[i - d] = t[i]
+		t[i] = nil
+	end
+end
+
+-- delete at index, swap in last
+-- element, loses ordering
+function idelf(t, i)
+	local n = #t
+	if i > 0 and i <= n then
+		t[i] = t[n]
+		t[n] = nil
+		return true
+	end
+	return false
+end
+
+-- fast deletion of an array of
+-- indices
+function idelfa(arr, idx)
+	local l = #arr
+
+	for i in all(idx) do
+		arr[i] = nil
+	end
+	if (#idx == l) return
+	for i = 1, l do
+		if arr[i] == nil then
+			while not arr[l]
+				and l > i
+			do
+				l -= 1
+			end
+			if i ~= l then
+				arr[i] = arr[l]
+				arr[l] = nil
+			else return end
+		end
+	end
+end
+-----------------------------------
+-->8
+ent={
+	currid=0
+}
+ent.__index=ent
+
+function ent.new()
+	local obj={}
+	setmetatable(obj,ent)
+	
+	ent.currid+=1
+
+	obj.id=ent.currid
+	obj.destroy=false
+	
+	return obj
+end
+
+setmetatable(ent,{
+	__call=function(_,...)
+		return ent.new(...)
+	end
+})
+
+function ent:update()
+end
+
+function ent:draw()
+	print(self.id,0,0)
+end
+
+	
+__gfx__
+00000000bbbbbbbbbb00bb00b000b000b000b0005555555555005500500050005000500000000000000000000000000000000000000000000000000000000000
+00000000bbbbbbbb00bb00bb00b000b0000000005555555500550055005000500000000000000000000000000000000000000000000000000000000000000000
+00700700bbbbbbbbbb00bb00b000b000000000005555555555005500500050000000000000000000000000000000000000000000000000000000000000000000
+00077000bbbbbbbb00bb00bb00b000b0000000005555555500550055005000500000000000000000000000000000000000000000000000000000000000000000
+00077000bbbbbbbbbb00bb00b000b000b000b0005555555555005500500050005000500000000000000000000000000000000000000000000000000000000000
+00700700bbbbbbbb00bb00bb00b000b0000000005555555500550055005000500000000000000000000000000000000000000000000000000000000000000000
+00000000bbbbbbbbbb00bb00b000b000000000005555555555005500500050000000000000000000000000000000000000000000000000000000000000000000
+00000000bbbbbbbb00bb00bb00b000b000b000b05555555500550055005000500050005000000000000000000000000000000000000000000000000000000000
+__gff__
+0001010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+__map__
+0101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010105050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050505050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501010101010505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0105050505050501050505050505050100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
