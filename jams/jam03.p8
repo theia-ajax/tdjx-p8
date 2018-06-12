@@ -3,8 +3,8 @@ version 16
 __lua__
 l={10,9,8,2,1}
 ::_::
-cls()srand()for m=0,300 do
-y=rnd()w=rnd(3)+2
+cls()srand()for m=0,100 do
+y=rnd()w=rnd(4)+1
 x=cos(y)*w
 z=sin(y)*w
 y=rnd(14)-7
