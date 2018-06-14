@@ -34,8 +34,8 @@ function _init()
 	
 	_lt_plt_addr=0x4500
 	for lt=0,6 do
-		for r=0,15 do
-			for l=0,15 do
+		for l=0,15 do
+			for r=0,15 do
 				local a=_lt_plt_addr+r*16+l+(6-lt)*0x100
 				local v=shl(_lt_plt[r][lt],4)+_lt_plt[l][lt]
 				poke(a,v)
@@ -77,9 +77,10 @@ function _draw()
 	cls()
 	map(0,0,0,0,16,16)
 
-	for y=py-20,py+20 do
-		light_hline(y,0,127)
+	for y=0,16 do
+		light_hline(y,127-16,127)
 	end
+
 	
 	if showplt then
  	rectfill(0,0,120,80,0)
@@ -98,8 +99,8 @@ function light_hline(y,x1,x2)
 	local x=x1
 	for scraddr=scrstr,scrend do
 		local lt=light_level(x,y)
-		local pltaddr=_lt_plt_addr+lt*0x100
-		--[[
+		local pltaddr=_lt_plt_addr+(6-lt)*0x100
+		
 		rectfill(0,0,40,127,0)
 
 		print(scraddr,0,0,11)
@@ -108,7 +109,7 @@ function light_hline(y,x1,x2)
 		print(bor(pltaddr,peek(scraddr)),0,18,11)
 		print(peek(bor(pltaddr,peek(scraddr))),0,24,11)
 		print(lt,0,30,11)
-		]]
+
 		poke(scraddr,
 			peek(
 				bor(pltaddr,peek(scraddr))))
