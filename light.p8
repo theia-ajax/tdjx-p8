@@ -33,10 +33,10 @@ function _init()
 	end
 	
 	_lt_plt_addr=0x4500
-	for lt=0,0 do
+	for lt=0,6 do
 		for r=0,15 do
 			for l=0,15 do
-				local a=_lt_plt_addr+r*16+l+lt*0x100
+				local a=_lt_plt_addr+r*16+l+(6-lt)*0x100
 				local v=shl(_lt_plt[r][lt],4)+_lt_plt[l][lt]
 				poke(a,v)
 			end
@@ -77,20 +77,9 @@ function _draw()
 	cls()
 	map(0,0,0,0,16,16)
 
-	local scrstr=0x6000
-	local scrend=0x6000//0x7fff
-	for scraddr=scrstr,scrend do
-//		poke(scraddr,0)
-		poke(scraddr,
-			peek(
-				bor(_lt_plt_addr,peek(scraddr))))
-		print(peek(scraddr),0,80,7)
-		print(peek(0x4555),0,86,7)
-	end
---[[
-	for y=0,127 do
+	for y=py-20,py+20 do
 		light_hline(y,0,127)
-	end]]
+	end
 	
 	if showplt then
  	rectfill(0,0,120,80,0)
@@ -103,28 +92,27 @@ function _draw()
 	end
 end
 
-function fast_getp(x,y)
-	local addr=0x6000+y*64+flr(x/2)
-	local v=peek(addr)
-	if x%2==0 then
-		return shr(band(v,0xf0),4)
-	else
-		return band(v,0xf)
-	end
-end
-
-function fast_setp(x,y,c)
-	if(x%2==1)x-=1
-	local addr=0x6000+y*64+flr(x/2)
-	
-end	
-
 function light_hline(y,x1,x2)
-	for x=x1,x2 do
+	local scrstr=max(0x6000+y*64+x1,0x6000)
+	local scrend=min(0x6000+y*64+x2,0x7fff)
+	local x=x1
+	for scraddr=scrstr,scrend do
 		local lt=light_level(x,y)
-		local c=fast_getp(x,y)
-		local ltbl=_lt_plt[c]
-		fast_setp(x,y,ltbl[6-lt])
+		local pltaddr=_lt_plt_addr+lt*0x100
+		--[[
+		rectfill(0,0,40,127,0)
+
+		print(scraddr,0,0,11)
+		print(peek(scraddr),0,6,11)
+		print(pltaddr,0,12,11)
+		print(bor(pltaddr,peek(scraddr)),0,18,11)
+		print(peek(bor(pltaddr,peek(scraddr))),0,24,11)
+		print(lt,0,30,11)
+		]]
+		poke(scraddr,
+			peek(
+				bor(pltaddr,peek(scraddr))))
+		x+=1
 	end
 end
 
