@@ -9,11 +9,12 @@ function _init()
 	plr.dy=0
 	plr.bstx=0
 	plr.bsty=0
-	plr.bstspd=.5
+	plr.bstspd=2
+	plr.brkspd=.5
 	plr.bstf=0
 	plr.bstacl=.2
 	plr.bstpwr=1
-	plr.bstdrn=.02
+	plr.bstdrn=.015
 	plr.bstlock=false
 	plr.r=0
 	
@@ -61,10 +62,26 @@ function _update()
  	plr.dy*=.97
  end
  
+ if plr.y<9 then
+ 	plr.y=9
+ 	plr.dy=0
+ elseif plr.y>123 then
+ 	plr.y=123
+ 	plr.dy=0
+ end
+ 
  local a=plr.dy/2
- plr.r=-a*.2
+ plr.r=lerp(plr.r,-a*.4,0.5)
  
  local bst,brk=btn(4),btn(5)
+ 
+ if (bst and brk) brk=false
+ 
+ if not bst and not brk and
+ 	plr.bstpwr>=1
+ then
+ 	plr.bstlock=false
+ end
  
  local usebst=not plr.bstlock
  	and (bst or brk)
@@ -77,13 +94,13 @@ function _update()
  	end
  end
  
- if bst and plr.bstpwr>0
+ if bst and not plr.bstlock
  then
  	plr.bstf+=plr.bstacl
  	plr.bstf=min(plr.bstf,1)
  end
  
- if brk and plr.bstpwr>0
+ if brk and not plr.bstlock
  then
  	plr.bstf-=plr.bstacl
  	plr.bstf=max(plr.bstf,-1)
@@ -93,7 +110,6 @@ function _update()
  	plr.bstpwr+=plr.bstdrn
 		if plr.bstpwr>=1 then
 			plr.bstpwr=1
-			plr.bstlock=false
 		end
 
 		if plr.bstf<0 then 	
@@ -105,8 +121,10 @@ function _update()
  	end
  end
 
- 
- local bstfc=plr.bstf*plr.bstspd
+
+	local spd=plr.bstspd
+	if (brk) spd=plr.brkspd
+ local bstfc=plr.bstf*spd
  local bx,by=
  	cos(plr.r)*bstfc,
  	sin(plr.r)*bstfc
@@ -158,4 +176,8 @@ end
 
 function clamp(v,mn,mx)
 	return min(max(v,mn),mx)
+end
+
+function lerp(a,b,t)
+	return a+(b-a)*t
 end
