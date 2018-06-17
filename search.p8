@@ -22,16 +22,16 @@ function _init()
 			end
 		end
 	end
-	
+
 	add(entities,plr)
-	
+
 	function rnd_spwn(lvl)
 		local n=#lvl.spts
 		local pt=
 			lvl.spts[flr(rnd(n))+1]
 		return pt.x,pt.y
 	end
-	
+
 	for i=1,5 do
 		local spx,spy=rnd_spwn(lvl)
 		add(entities,new_enm(spx,spy))
@@ -52,7 +52,7 @@ function _update()
 			add(entities.rq,i)
 		end
 	end
-	
+
 	-- remove all entities at
 	-- indices in the remove queue
 	idelfa(entities,entities.rq)
@@ -63,7 +63,7 @@ end
 function _draw()
 	cls()
 	fillp()
-	
+
 	for x=0,15 do
 		for y=0,15 do
 			wx=x*8+4
@@ -87,7 +87,7 @@ function _draw()
 			end
 		end
 	end
-	
+
 	for ent in all(entities) do
 		ent:draw()
 	end
@@ -102,26 +102,26 @@ function new_plr(x,y)
 	plr.dx=0
 	plr.dy=0
 	plr.ltr=14*8
-	
+
 	plr.spd=1
 	plr.turnspd_move=0.02
 	plr.turnspd_aim=0.005
-	
+
 	plr.armtf=24
 	plr.armf=0
 	plr.loadmx=6
 	plr.ammoload=plr.loadmx
 	plr.reloadtf=30
 	plr.reloadf=0
-	
+
 	plr.arming=function(plr)
 		return plr.armf>0
 	end
-	
+
 	plr.armed=function(plr)
 		return plr.armf>=plr.armtf
 	end
-	
+
 	plr.update=plr_update
 	plr.draw=plr_draw
 	return plr
@@ -136,7 +136,7 @@ function plr_update(plr)
 		plr.armf=0
 		plr.reloadf=0
 	end
-	
+
 	if plr:arming() and
 		plr.ammoload==0
 	then
@@ -147,7 +147,7 @@ function plr_update(plr)
 			plr.reloadf=0
 		end
 	end
-	
+
 	if plr:armed() then
 		if btn(4) and plr.ammoload>0
 		then
@@ -171,7 +171,7 @@ function plr_update(plr)
 	then
 		spd=plr.spd
 	end
-	
+
 	plr.dx=cos(plr.r)
 	plr.dy=sin(plr.r)
 	plr.vx=plr.dx*spd
@@ -182,7 +182,7 @@ function plr_update(plr)
 	then
 		plr.vx=0
 	end
-	
+
 	if circ_solid(plr.x,
 		plr.y+plr.vy,4)
 	then
@@ -198,7 +198,7 @@ function plr_draw(plr)
 	line(plr.x,plr.y,
 		plr.x+plr.dx*4,
 		plr.y+plr.dy*4,11)
-		
+
 	if plr:armed() then
 		line(plr.x+plr.dx*4,
 			plr.y+plr.dy*4,
@@ -210,7 +210,7 @@ function plr_draw(plr)
 		local hx=plr.x-7
 		local hy=plr.y+3
 		line(hx,hy,hx,hy-af*6,7)
-		
+
 		if plr.ammoload>0 then
  		local lf=
  			plr.ammoload/plr.loadmx
@@ -218,7 +218,7 @@ function plr_draw(plr)
  		local ly=plr.y+3
  		line(lx,ly,lx,ly-lf*6,7)
  	end
-		
+
 		if plr.reloadf>0 then
  		local rf=
  			plr.reloadf/plr.reloadtf
@@ -244,7 +244,7 @@ end
 function enm_update(enm)
 	enm.r=atan2(plr.x-enm.x,
 		plr.y-enm.y)
-		
+
 	enm.dx=cos(enm.r)
 	enm.dy=sin(enm.r)
 	enm.vx=enm.dx*.2
@@ -255,13 +255,13 @@ function enm_update(enm)
 	then
 		enm.vx=0
 	end
-	
+
 	if circ_solid(enm.x,
 		enm.y+enm.vy,4)
 	then
 		enm.vy=0
 	end
-	
+
 	enm.x+=enm.vx
 	enm.y+=enm.vy
 end
@@ -449,12 +449,12 @@ ent.__index=ent
 function ent.new()
 	local obj={}
 	setmetatable(obj,ent)
-	
+
 	ent.currid+=1
 
 	obj.id=ent.currid
 	obj.destroy=false
-	
+
 	return obj
 end
 
@@ -471,7 +471,7 @@ function ent:draw()
 	print(self.id,0,0)
 end
 
-	
+
 __gfx__
 00000000bbbbbbbbbb00bb00b000b000b000b0005555555555005500500050005000500000000000000000000000000000000000000000000000000000000000
 00000000bbbbbbbb00bb00bb00b000b0000000005555555500550055005000500000000000000000000000000000000000000000000000000000000000000000
