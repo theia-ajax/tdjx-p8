@@ -33,9 +33,9 @@ end
 function _draw()
 	cls(9)
 
-	gradv(0,0,127,30,1,2)
-	gradv(0,30,127,60,2,9)
-	gradv(0,60,127,127,9,8)
+	gradv(0,0,130,30,1,2)
+	gradv(0,30,130,60,2,9)
+	gradv(0,60,130,127,9,8)
 
 	for i=0,water.vtct-1 do
 		local v1=water.vts[i]
@@ -81,15 +81,15 @@ function gradh(x,y,w,h,c1,c2,flp)
 	if (flp) c1,c2=c2,c1
 end
 
-function gradv(x,y,w,h,c1,c2,sqsh,flp)
+function gradv(x,y,w,h,c1,c2,flp)
 	if (flp) c1,c2=c2,c1
 	local col=bor(shl(c2,4),c1)
 	local chnks=#_k_grad_ptns
-	local delta=(h-0)/chnks
+	local delta=h/chnks
 	for i=0,chnks-1 do
-		fillp(ptnrotr(_k_grad_ptns[i+1],flr(t())%4))
-		rectfill(x,y+flr(i*(h/chnks)),
-			x+w,y+ceil((i+1)*(h/chnks)),
+		fillp(_k_grad_ptns[i+1],flr(t())%4)
+		rectfill(x,y+flr(i*delta),
+			x+w,y+ceil((i+1)*delta),
 			col)
 	end
 
@@ -98,20 +98,4 @@ end
 
 function lerp(a,b,t)
 	return a+(b-a)*t
-end
-
-function ptnrotr(ptn,n)
-	local p=rotr(ptn,n)
-	local m=band(p,0x0000.ffff)
-	p=shr(shl(band(p,0xffff.0000),n),n)
-	p=bor(p,shl(m,16))
-	return p
-end
-
-function ptnrotl(ptn,n)
-	local p=rotr(ptn,n)
-	local m=band(p,0x0000.ffff)
-	p=band(p,0xffff.0000)
-	p=bor(p,shl(m,16))
-	return p
 end
