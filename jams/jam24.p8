@@ -4,7 +4,7 @@ __lua__
 l=rectfill
 ::_::
 cls()
-srand(5)
+srand(12)
 l(63,64,65,69,6)
 for i=0,17 do
 x=rnd(8)-4+64
@@ -16,4 +16,8 @@ circfill(64+rnd(6)-3,54+rnd(2)-1,3,5)
 end
 l(0,70,127,70,11)
 l(59,70,69,70,3)
+for i=0,19 do
+x=rnd(128)-2
+l(x,64,x+2,69,8+(i%7))
+end
 flip()goto _
