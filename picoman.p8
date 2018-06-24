@@ -10,9 +10,32 @@ end
 function _init()
 	poke(0x5f2d, 1)
 
+	wld={}
+	wld.ox=1
+	wld.oy=-4
+	wld.cw=20
+	wld.ch=20
+	wld.cszx=6 --cell size
+	wld.cszy=6
+	wld.enspt={}
+	for cx=0,wld.cw do
+		for cy=0,wld.ch do
+			local m=mget(cx,cy)
+			if fget(m,5) then
+				local wx,wy=c2w(
+					cx,cy)
+				add(wld.enspt,{
+					x=wx,y=wy,
+					cx=cx,cy=cy
+				})
+			end
+		end
+	end
+
 	plr={}
 	plr.x=64
 	plr.y=89
+	plr.cx,plr.cy=w2c(plr.x,plr.y)
 	plr.w=6
 	plr.h=6
 	plr.hw=plr.w/2
@@ -30,37 +53,20 @@ function _init()
 	plr.trx,plr.try=0,0
 	plr.blx,plr.bly=0,0
 	plr.brx,plr.bry=0,0
-	
-	wld={}
-	wld.ox=1
-	wld.oy=-4
-	wld.cw=20
-	wld.ch=20
-	wld.cszx=6 --cell size
-	wld.cszy=6
+
+	plr.onstop=function(self)
+		self.cdir=0
+	end
+
 	wld.boundl=wld.ox+
 		wld.cszx-
 		plr.hw-1
 	wld.boundr=wld.ox+
 		wld.cw*wld.cszx+
 		plr.hw
-	wld.enspt={}
-	for cx=0,wld.cw do
-		for cy=0,wld.ch do
-			local m=mget(cx,cy)
-			if fget(m,5) then
-				local wx,wy=cell_to_world(
-					cx,cy)
-				add(wld.enspt,{
-					x=wx+4,y=wy+4,
-					cx=cx,cy=cy
-				})
-			end
-		end
-	end
 		
 	ghosts={}
-	ghostct=4
+	ghostct=1
 	for i=1,ghostct do
 		local spt=wld.enspt[2]
 		add(ghosts,new_ghost(
@@ -75,9 +81,9 @@ function _init()
 				not fget(m,2)
 			then
 				local wx,wy=
-					cell_to_world(x,y)
+					c2w(x,y)
 				add(dots,{
-					x=wx+2,y=wy+2,
+					x=wx-1,y=wy-1,
 					hide=false,
 					power=false
 				})
@@ -242,6 +248,12 @@ function _draw()
 	rectfill(0,0,wld.boundl+3,127,0)
 	rectfill(wld.boundr-3,0,127,127,0)	
 	
+	for g in all(ghosts) do
+		wld_draw_cell(g.cx,g.cy,2)
+	end
+	
+	wld_draw_cell(plr.cx,plr.cy,11)
+	
 --[[	
 	local msx,msy=stat(32),stat(33)
 	for i=1,#dots do
@@ -254,8 +266,17 @@ function _draw()
 	pset(msx,msy,11)
 ]]
 
-	spr(76+((t()*6)%4),40,119)
- spr(80+((t()*4)%10),64,119)
+//	spr(76+((t()*6)%4),40,119)
+// spr(80+((t()*4)%10),64,119)
+ 
+ 
+	for x=0,wld.cw do
+		for y=0,wld.ch do
+			if cell_solid(x,y) then
+				wld_draw_cell(x,y,8)
+			end
+		end
+	end
  
  local cpu=band(stat(1)*100,
  	0xffff)
@@ -317,13 +338,19 @@ function ent_move(ent)
 	
 	if not ent_clear(ent,ent.cdir)
 	then
-		ent.cdir=0
+		if type(ent.onstop)==
+			"function"
+		then
+			ent:onstop()
+		end
 		dx=0
 		dy=0
 	end
 	
 	ent.x+=dx
 	ent.y+=dy
+	
+	ent.cx,ent.cy=w2c(ent.x,ent.y)
 	
 	if dx>0 and ent.x>=wld.boundr
 	then
@@ -347,17 +374,9 @@ function ent_move(ent)
 	ent.bry=ent.y+ent.hh-1
 end
 
-function ent_cell(ent)
-	return world_to_cell(
-		ent.x,ent.y)
-end
-
-function ent_overlap(e1,e2,tol)
-	tol=tol or 0
-
-	local dx,dy=abs(e1.x-e2.x),
-		abs(e1.y-e2.y)
-	return dx<=tol and dy<=tol
+function ent_overlap(e1,e2)
+	return e1.cx==e2.cx and
+		e1.cy==e2.cy
 end
 
 _ghost_data={
@@ -379,15 +398,20 @@ _ghost_data={
 	},
 }
 
+k_mv_chase=1
+k_mv_scatter=2
+k_mv_fright=3
+
 -- ghosts
 function new_ghost(x,y,gt)
 	local gst={}
 	
 	gst.x=x or 0
 	gst.y=y or 0
-	gst.tcx=-1 --target cell x
-	gst.tcy=-1 --target cell y
-	gst.cdir=0
+	gst.cx,gst.cy=w2c(gst.x,gst.y)
+	gst.tcx,gst.tcy=
+		plr.cx,plr.cy
+	gst.cdir=1
 	gst.sdir=1
 	gst.gtype=gt or 0
 	gst.w=6
@@ -403,6 +427,7 @@ function new_ghost(x,y,gt)
 	gst.spivl=12+flr(rnd(8))
 	gst.spf=gst.spivl
 	gst.flx=false
+	gst.mvmode=k_mv_chase
 	gst.stundur=300
 	gst.stunf=0
 	gst.stunmvivl=8
@@ -411,6 +436,10 @@ function new_ghost(x,y,gt)
 	gst.phasef=gst.gtype*60
 
 	return gst
+end
+
+function ghost_set_mv(mode)
+	
 end
 
 function ghost_mvivl(gst)
@@ -435,13 +464,10 @@ end
 
 function
 ghost_target_plr(gst,plr)
-	gst.tcx,gst.tcy=
-		world_to_cell(plr.x,plr.y)
+	gst.tcx,gst.tcy=plr.cx,plr.cy
 end
 
 function ghost_update(gst)
-	if (gst.cdir==0) gst.cdir=flr(rnd(4))+1
-	
 	if ghost_on_spawn(gst) then
 		gst.stunf=0
 		
@@ -458,9 +484,7 @@ function ghost_update(gst)
 			gst.hide=false
 		end
 	
-		local cx,cy=world_to_cell(
-			gst.x,gst.y)
-		if fget(mget(cx,cy),6) and
+		if fget(mget(gst.cx,gst.cy),6) and
 			not cell_is_spawn(gst.tcx,gst.tcy)
 		then	
 			gst.phase=false
@@ -477,8 +501,12 @@ function ghost_update(gst)
 		gst.mvf-=1
 		if gst.mvf<=0 then
 			gst.mvf=ghost_mvivl(gst)
-			ghost_eval(gst)
+			local cx,cy=gst.cx,gst.cy
 			ent_move(gst)
+			if gst.cx~=cx or gst.cy~=cy
+			then
+				ghost_eval(gst)
+			end
 		end
 	end
 	
@@ -506,12 +534,18 @@ function ghost_eval(gst)
 			end
 		end
 	end
+	
+	if #opts==0 and 
+		ent_clear(gst,back)
+	then
+		add(opts,back)
+	end
 
 	if #opts>0 then
+		log(gst.tcx..","..gst.cy)
  	if gst.tcx>=0 and gst.tcy>=0
  	then
- 		local cx,cy=world_to_cell(
- 			gst.x,gst.y)
+ 		local cx,cy=gst.cx,gst.cy
  		local best=0
  		local mn=999
  		for i=1,#opts do
@@ -525,6 +559,7 @@ function ghost_eval(gst)
   			best=o
   		end
   	end
+  	log(best)
   	gst.cdir=best
   else
  	 gst.cdir=opts[flr(rnd(#opts))+1]
@@ -537,8 +572,7 @@ function ghost_stun(gst)
 end
 
 function ghost_on_spawn(gst)
-	local cx,cy=world_to_cell(
-		gst.x,gst.y)
+	local cx,cy=gst.cx,gst.cy
 
 	for spt in all(wld.enspt) do
 		if spt.cx==cx and spt.cy==cy
@@ -606,11 +640,11 @@ function cdir_back(cdir)
 end
 
 function point_solid(x,y,ph)
-	local cx,cy=world_to_cell(x,y)
+	local cx,cy=w2c(x,y)
 	return cell_solid(cx,cy,ph)
 end
 
-function world_to_cell(wx,wy)
+function w2c(wx,wy)
 	return 
 		flr((wx-wld.ox)/wld.cszx),
 		flr((wy-wld.oy)/wld.cszy)
@@ -620,9 +654,9 @@ function cell_is_spawn(cx,cy)
 	return fget(mget(cx,cy),5)
 end
 
-function cell_to_world(cx,cy)
-	return cx*wld.cszx+wld.ox,
-		cy*wld.cszy+wld.oy
+function c2w(cx,cy)
+	return cx*wld.cszx+wld.ox+flr(wld.cszx/2),
+		cy*wld.cszy+wld.oy+flr(wld.cszy/2)
 end
 
 function cell_in_dir(cx,cy,d)
@@ -647,6 +681,13 @@ end
 function wld_rnd_spawn()
 	local idx=flr(rnd(#wld.enspt))
 	return wld.enspt[idx+1]
+end
+
+function wld_draw_cell(cx,cy,c)
+	local x=wld.ox+wld.cszx*cx
+	local y=wld.oy+wld.cszy*cy
+	rectfill(x,y,
+		x+wld.cszx-1,y+wld.cszy-1,c)
 end
 
 _btn_cdir={3,1,2,4}
