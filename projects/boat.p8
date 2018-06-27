@@ -2,7 +2,11 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 
+
+
 function _init()
+	frame=0
+
 	water={}
 	water.y=110
 	water.vts={}
@@ -17,17 +21,66 @@ function _init()
 
 	boat={}
 	boat.x=40
-	boat.y=64
+	boat.y=110
+	boat.w=20
+	boat.h=8
+	boat.hw=boat.w/2
+	boat.hh=boat.h/2
 	boat.r=0
+	boat.spd=0
+	boat.mxspd=0.5
+	boat.acl=.005
+	boat.fric=.0025
+	boat.drag=0.2
 	boat.dx=0
 	boat.dy=0
 	boat.dr=0
+	
+	stars={}
+	for i=0,15 do
+		add(stars,{
+			x=rnd(128),
+			y=rnd(40),
+			m=flr(rnd(10))
+		})
+	end
 end
 
-function _update()
+function _update60()
 	for i=0,water.vtct do
-		water.vts[i].y=water.y+sin(t()+i/(water.vtct/2))*4
+		water.vts[i].y=water.y+sin(t()/4+i/(water.vtct/2))*4
 	end
+	
+	local ix,iy=0,0
+	if (btn(0)) ix-=1
+	if (btn(1)) ix+=1
+	if (btn(2)) iy-=1
+	if (btn(3)) iy+=1
+	
+	boat.x+=ix*0.2
+	
+	if btn(4) then
+	 boat.spd+=boat.acl
+	else
+		boat.spd-=boat.fric
+	end
+	
+	boat.spd=clamp(boat.spd,0,boat.mxspd)
+	
+	boat.x+=boat.spd-boat.drag
+	
+	boat.x=clamp(boat.x,13,115)
+	
+	local lx,ly=boat_left()
+	local rx,ry=boat_right()
+	local left=water_y(lx)
+	local right=water_y(rx)
+	
+	boat.y=water_y(boat.x)-20
+	
+	boat.r=atan2(rx-lx,right-left)
+	
+	frame+=1
 end
 
 function _draw()
@@ -36,6 +89,20 @@ function _draw()
 	gradv(0,0,130,30,1,2)
 	gradv(0,30,130,60,2,9)
 	gradv(0,60,130,127,9,8)
+
+	rectrfill(boat.x,boat.y,
+		boat.w,boat.h,boat.r,0)
+	
+	local mastx,masty=
+		rotate(0,-20,boat.r)
+	line(boat.x,boat.y,
+		mastx+boat.x,masty+boat.y,0)
+		
+	local slcx,slcy=rotate(0,-13,boat.r)
+	local frac=boat.spd/boat.mxspd
+
+	rectrfill(slcx+boat.x,slcy+boat.y,
+		frac*12,12,boat.r,0)
 
 	for i=0,water.vtct-1 do
 		local v1=water.vts[i]
@@ -46,12 +113,26 @@ function _draw()
 	end
 	rectfill(0,water.y+4,127,127,1)
 
-	for i=0,19 do
+	for i=0,9 do
 		x=rnd(128)
 		c=12
-		if (rnd(100)<5) c=14
+		if (rnd(100)<20) c=14
 		pset(x,water_y(x),c)
 	end
+	
+	for star in all(stars) do
+		if frame%star.m~=0 then
+			pset(star.x,star.y,7)
+		end
+	end
+	
+	print(boat.x..","..boat.y,0,0,7)
+	print(boat.spd,0,6,7)
+	
+	local mem="mem:"..band(stat(0)/2048,0xffff).."%"
+	local cpu="cpu:"..band(stat(1)*100,0xffff).."%"
+	//print(mem,0,0,7)
+	//print(cpu,0,6,7)
 end
 
 function water_y(x)
@@ -96,6 +177,190 @@ function gradv(x,y,w,h,c1,c2,flp)
 	fillp()
 end
 
+-- center x,y
+-- width, height
+-- rotation 0-1 tau
+-- color
+function rectr(cx,cy,w,h,r,c)
+	local hw,hh=w/2,h/2
+	local x1,y1=rotate(-hw,-hh,r)
+	local x2,y2=rotate(hw,-hh,r)
+	local x3,y3=rotate(-hw,hh,r)
+	local x4,y4=rotate(hw,hh,r)
+	
+	line(x1+cx,y1+cy,x2+cx,y2+cy,c)
+	line(x1+cx,y1+cy,x3+cx,y3+cy,c)
+	line(x2+cx,y2+cy,x4+cx,y4+cy,c)
+	line(x3+cx,y3+cy,x4+cx,y4+cy,c)
+end
+
+function rectrfill(cx,cy,w,h,r,c)
+	local hw,hh=w/2,h/2
+	local x1,y1=rotate(-hw,-hh,r)
+	local x2,y2=rotate(hw,-hh,r)
+	local x3,y3=rotate(-hw,hh,r)
+	local x4,y4=rotate(hw,hh,r)
+
+	line(x2+cx,y2+cy,x3+cx,y3+cy,c)
+	tri(x1+cx,y1+cy,
+		x2+cx,y2+cy,
+		x3+cx,y3+cy,c)
+	tri(x3+cx,y3+cy,
+		x2+cx,y2+cy,
+		x4+cx,y4+cy,c)
+end
+
+function rotate(x,y,r)
+	return x*cos(r)-y*sin(r),
+		x*sin(r)+y*cos(r)
+end
+
+function clamp(v,mn,mx)
+	if (mx<mn) mn,mx=mx,mn
+	return min(max(v,mn),mx)
+end
+
+function clamp01(v)
+	return clamp(v,0,1)
+end
+
 function lerp(a,b,t)
 	return a+(b-a)*t
 end
+
+function boat_left()
+	local x,y=rotate(-boat.hw,
+		boat.hw,
+		boat.r)
+	return x+boat.x,y+boat.y
+end
+
+function boat_right()
+	local x,y=rotate(boat.hw,
+		boat.hw,
+		boat.r)
+	return x+boat.x,y+boat.y
+end
+
+__tri_buff = {{x=0,y=0},{x=0,y=0},{x=0,y=0}}
+__top_buff = {{x=0,y=0},{x=0,y=0},{x=0,y=0}}
+__bot_buff = {{x=0,y=0},{x=0,y=0},{x=0,y=0}}
+function tri(x1,y1,x2,y2,x3,y3,c)
+	if (c) color(c)
+
+	vts = __tri_buff
+	vts[1].x, vts[1].y = x1, y1
+	vts[2].x, vts[2].y = x2, y2
+	vts[3].x, vts[3].y = x3, y3
+
+ sort(vts, function(a,b) return a.y<b.y end)
+
+ if vts[1].y == vts[2].y then
+ 	_fttri(vts)
+ elseif vts[3].y == vts[2].y then
+ 	_fbtri(vts)
+	else
+		local tx, ty = vts[1].x, vts[1].y
+		local mx, my = vts[2].x, vts[2].y
+		local bx, by = vts[3].x, vts[3].y
+		local x4 = tx +
+			(my-ty)/
+			(by-ty)*
+			(bx-tx)
+		local y4 = vts[2].y
+
+		__top_buff[1]=vts[1]
+		__top_buff[2]=vts[2]
+		__top_buff[3].x=x4
+		__top_buff[3].y=y4
+
+		__bot_buff[1]=vts[2]
+		__bot_buff[2].x=x4
+		__bot_buff[2].y=y4
+		__bot_buff[3]=vts[3]
+
+		_fbtri(__top_buff)
+		_fttri(__bot_buff)
+	end
+end
+
+function _fttri(vts)
+	local bx = vts[3].x
+	local by = vts[3].y
+	local ty = vts[1].y
+	local lx = min(vts[1].x, vts[2].x)
+	local rx = max(vts[1].x, vts[2].x)
+
+	local ml = (bx-lx)/(by-ty)
+	local mr = (bx-rx)/(by-ty)
+
+	local l, r = bx, bx
+
+	for y = by, ty, -1  do
+		_hline(y, l, r)
+		l -= ml
+		r -= mr
+	end
+end
+
+function _fbtri(vts)
+	local tx = vts[1].x
+	local ty = vts[1].y
+	local by = vts[2].y
+	local lx = vts[2].x
+	local rx = vts[3].x
+
+	local ml = (lx-tx)/(by-ty)
+	local mr = (rx-tx)/(by-ty)
+
+	local l, r = tx, tx
+
+	for y = ty, by  do
+		_hline(y, l, r)
+		l += ml
+		r += mr
+	end
+end
+
+function _hline(y,x1,x2)
+	line(x1,y,x2,y)
+end
+
+function sort(a,fnlt)
+	local i = 2
+	while i <= #a do
+		local x = a[i]
+		local j = i - 1
+		while j >= 1 and fnlt(x, a[j]) do
+			a[j+1] = a[j]
+			j -= 1
+		end
+		a[j+1] = x
+		i += 1
+	end
+end
+
+function round(n)
+	if n-flr(n) < 0.5 then
+		return flr(n)
+	else
+		return ceil(n)
+	end
+end
+
+function mag(v)
+	return sqrt(v.x*v.x+v.y*v.y+v.z*v.z)
+end
+
+function norm(v)
+	local l = mag(v)
+	if l > 0 then
+		v.x /= l
+		v.y /= l
+		v.z /= l
+	else
+		v.x, v.y, v.z = 0, 0, 0
+	end
+	return v
+end
+
