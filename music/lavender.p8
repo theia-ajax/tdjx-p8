@@ -6,10 +6,19 @@ function _init()
 end
 
 function _update()
+	
 end
 
 function _draw()
-	cls()
+	cls(13)
+	
+	srand()
+	for i=0,70 do
+		local r=4+flr(rnd(5))
+		local x=((t()*(10+i/20)+(rnd(128+r*2)))%(128+r*2))-r
+		local y=((-t()*(4+i/20)+(rnd(128+r*2)))%(128+r*2))-r
+		circfill(x,y,r,0)
+	end
 end
 __label__
 88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888
