@@ -3,14 +3,17 @@ version 16
 __lua__
 dbg_show_raycasts=false
 dbg_frame_advance=false
+dbg_next_frame=false
 
 function onkey(key)
 	if key=="r" then
 		dbg_show_raycasts=
 			not dbg_show_raycasts
-	elseif key=="m" then
+	elseif key=="a" then
 		dbg_frame_advance=
 			not dbg_frame_advance
+	elseif key=="s" then
+		dbg_next_frame=true
 	end
 end
 
@@ -30,13 +33,17 @@ function _init()
 end
 
 function _update()
-	clear_dbg_raycasts()
-
 	if (stat(30)) onkey(stat(31))
 
 	if dbg_frame_advance then
-		return
+		if dbg_next_frame then
+			dbg_next_frame=false
+		else
+			return
+		end
 	end
+
+	clear_dbg_raycasts()
 
 	inp={
 		dx=0,dy=0,
@@ -121,9 +128,8 @@ function entity_move(self,inp)
 	end
  
  if self.dy<0 then
- 	local hit,d=cast_up(
- 		self.x,self.y-self.hh,
- 		-self.dy)
+ 	local hit,d=
+ 		entity_check_up(self)
  		
  	if (hit) self.dy=-d
  end
@@ -142,17 +148,15 @@ function entity_move(self,inp)
 	self.dx=moveto(self.dx,0,fric)
 	
 	if self.dx<0 then
- 	local left,ld=cast_left(
- 		self.x-self.hw,self.y,
- 		-self.dx)
+ 	local left,ld=
+ 		entity_check_left(self)
  		
  	if (left) self.dx=-ld
  elseif self.dx>0 then
- 	local right,rd=cast_right(
- 		self.x+self.hw,self.y,
- 		self.dx)
+ 	local right,rd=
+	 	entity_check_right(self)
 
-		if (right) self.dx=rd 	
+		if (right) self.dx=rd
  end
  
  self.dx=clamp(self.dx,
@@ -165,25 +169,62 @@ end
 
 function entity_ground_check(self)
 	local left,ld=cast_down(
-		self.x-2,self.y+self.hh+1,
+		self.x-1,self.y+self.hh+1,
 		self.dy)
 		
 	local right,rd=cast_down(
-		self.x+2,self.y+self.hh+1,
+		self.x+1,self.y+self.hh+1,
 		self.dy)
 		
 	return left or right,
 		min(ld,rd)		
 end
 
+function entity_check_right(self)
+	local top,td=cast_right(
+		self.x+self.hw+1,self.y-self.hh,
+		self.dx)
+		
+	local bot,bd=cast_right(
+		self.x+self.hw+1,self.y+self.hh,
+		self.dx)
+		
+	return top or bot,min(td,bd)
+end
+
+function entity_check_left(self)
+	local top,td=cast_left(
+		self.x-self.hw,self.y-self.hh,
+		self.dx)
+		
+	local bot,bd=cast_left(
+		self.x-self.hw,self.y+self.hh,
+		self.dx)
+		
+	return top or bot,min(td,bd)
+end
+
+function entity_check_up(self)
+	local left,ld=cast_up(
+		self.x-2,self.y-self.hh,
+		self.dy)
+		
+	local right,rd=cast_up(
+		self.x+2,self.y-self.hh,
+		self.dy)
+
+	return left or right,min(ld,rd)
+end
+
 function cast_right(ox,oy,d,s)
 	s=s or 1
+	d=abs(d)
 	
 	add_dbg_raycast(ox,oy,d,1)
 	
 	for x=ox,ox+d,s do
 		if point_solid(x,oy) then
-			return true,x-ox
+			return true,abs(x-ox)
 		end
 	end
 	return false
@@ -191,25 +232,27 @@ end
 
 function cast_left(ox,oy,d,s)
 	s=s or 1
+	d=abs(d)
 
 	add_dbg_raycast(ox,oy,d,0)
 
 	for x=ox,ox-d,-s do
 		if point_solid(x,oy) then
-			return true,ox-x
+			return true,abs(ox-x)
 		end
 	end
-	return false
+	return false,0x7fff
 end
 
 function cast_down(ox,oy,d,s)
 	s=s or 1
+	d=abs(d)
 	
 	add_dbg_raycast(ox,oy,d,3)
 	
 	for y=oy,oy+d,s do
 		if point_solid(ox,y) then
-			return true,y-oy
+			return true,abs(y-oy)
 		end
 	end
 	return false
@@ -217,12 +260,13 @@ end
 
 function cast_up(ox,oy,d,s)
 	s=s or 1
+	d=abs(d)
 	
 	add_dbg_raycast(ox,oy,d,2)
 	
 	for y=oy,oy-d,-s do
 		if point_solid(ox,y) then
-			return true,oy-y
+			return true,abs(oy-y)
 		end
 	end
 	return false

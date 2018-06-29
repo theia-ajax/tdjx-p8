@@ -7,7 +7,7 @@ function _init()
 	rooms={}
 	doors={}
 	
-	for i=1,40 do
+	for i=1,80 do
 		add_room(0,0)
 	end
 end
@@ -16,6 +16,10 @@ function _update()
 	if sleepf>0 then
 		sleepf-=1
 		return
+	end
+
+	for r in all(rooms) do
+		r.moved=false
 	end
 
 	finished=true
@@ -30,6 +34,7 @@ function _update()
 				if r2.id>r1.id then
 					r=r2
 				end
+				r.moved=true
 				r.fromx=r.x
 				r.fromy=r.y
 				local d=flr(rnd(4))
@@ -42,7 +47,7 @@ function _update()
 				elseif d==3 then
 					r.y+=1
 				end
-				goto stop_gen
+				break
 			end
 		end
 	end
@@ -66,9 +71,21 @@ function _draw()
 	for r in all(rooms) do
 		local x1,y1=r.x*8+60,r.y*8+60
 		local x2,y2=x1+8,y1+8
-		rectfill(x1,y1,x2,y2,6)
+		if not r.moved then
+			rectfill(x1,y1,x2,y2,6)
+		end
 	 rect(x1,y1,x2,y2,8)
 	end
+
+	for r in all(rooms) do
+		local x1,y1=r.x*8+60,r.y*8+60
+		local x2,y2=x1+8,y1+8
+		if r.moved then
+			rectfill(x1,y1,x2,y2,12)
+		end
+	 rect(x1,y1,x2,y2,8)
+	end
+
 
 	for r in all(rooms) do
 			local cx,cy=r.x*8+64,r.y*8+64
