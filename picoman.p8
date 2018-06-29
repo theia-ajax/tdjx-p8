@@ -3,12 +3,25 @@ version 16
 __lua__
 cell_debug=false
 mspico_mode=false
+dbg_frame_advance_mode=true
+dbg_advance_frame=false
+dbg_show_log=true
 
 function onkey(key)
 	if key=="f" then
 		ghost_kill(ghosts[1])
 	elseif key=="d" then
 		cell_debug=not cell_debug
+	elseif key=="a" then
+		dbg_frame_advance_mode=
+			not dbg_frame_advance_mode
+	elseif key=="s" then
+		if dbg_frame_advance_mode
+		then
+			dbg_advance_frame=true
+		end
+	elseif key=="l" then
+		dbg_show_log=not dbg_show_log
 	end
 end
 
@@ -38,6 +51,7 @@ function _init()
 	end
 
 	plr={}
+	plr.picoman=true
 	plr.x=64
 	plr.y=89
 	plr.cx,plr.cy=w2c(plr.x,plr.y)
@@ -128,14 +142,25 @@ function _update60()
 	if stat(30) then
 		onkey(stat(31))
 	end
+
+	if dbg_frame_advance_mode then
+		if not dbg_advance_frame then
+			return
+		else
+			dbg_advance_frame=false
+		end
+	end
 	
 	if btnp(4) then
 		mspico_mode=not mspico_mode
 	end
 
+	local cx,cy=w2c(plr.x,plr.y)
+	local ccx,ccy=c2w(cx,cy)
 	for i=0,3 do
 		local c=btn_cdir(i)
 		if btn(i) and
+			plr.x==ccx and plr.y==ccy and
 			ent_clear(plr,c) and
 			c~=plr.cdir
 		then
@@ -292,14 +317,15 @@ function _draw()
  local memstr="mem: "..lz(tostr(mem),1).."%"
  print(memstr,127-#memstr*4,117,7)
 
- console_draw()
+	if (dbg_show_log) console_draw()
 end
 
-function
-ent_clear(ent,cdir,dx,dy)
+function ent_clear(ent,cdir,dx,dy)
 	local xx,yy=cdir_to_dir(cdir)
 	dx=dx or xx
 	dy=dy or yy
+
+	
 
 	local lx,ly=0,0
 	local rx,ry=0,0
@@ -330,6 +356,12 @@ ent_clear(ent,cdir,dx,dy)
 	local ph=ent.phase
 	local s1=point_solid(lx,ly,ph)
 	local s2=point_solid(rx,ry,ph)
+	
+	if not ent.picoman and cdir==2 then
+		log(ent.x.." "..lx..","..rx)
+		log(tostr(s1)..":"..tostr(s2))
+	end
+		
 	return not s1 and not s2
 end
 
@@ -339,7 +371,6 @@ function ent_move(ent)
 		
 	dx*=1
 	dy*=1
-	
 	if not ent_clear(ent,ent.cdir)
 	then
 		if type(ent.onstop)==
@@ -355,10 +386,12 @@ function ent_move(ent)
 	ent.y+=dy
 
 	local oldx,oldy=ent.cx,ent.cy	
-	ent.cx,ent.cy=w2c(ent.x,ent.y)
+	local ncx,ncy=w2c(ent.x,ent.y)
+	local ccx,ccy=c2w(ncx,ncy)
 	
-	if oldx~=ent.cx or oldy~=ent.cy
+	if ccx==ent.x and ccy==ent.y
 	then
+		ent.cx,ent.cy=w2c(ent.x,ent.y)
  	local warp=fget(
  		mget(ent.cx,ent.cy),3)
  	if warp then
@@ -551,6 +584,8 @@ function ghost_update(gst)
 end
 
 function ghost_eval(gst)
+	local l=gst.cx==10
+	
 	local opts={}
 	local back=cdir_back(gst.cdir)
 	for c=1,4 do
@@ -563,6 +598,8 @@ function ghost_eval(gst)
 		end
 	end
 	
+	if (l) log(opts[1])
+	
 	if #opts==0 and 
 		ent_clear(gst,back)
 	then
@@ -570,7 +607,6 @@ function ghost_eval(gst)
 	end
 
 	if #opts>0 then
-		log(gst.tcx..","..gst.cy)
 		local cx,cy=gst.cx,gst.cy
 		local best=0
 		local mn=999
@@ -585,7 +621,7 @@ function ghost_eval(gst)
  			best=o
  		end
  	end
- 	log(best)
+
  	gst.cdir=best
  end
 end
@@ -636,11 +672,11 @@ function ghost_draw(gst)
  end
 
 
-//	pset(gst.x,gst.y,7)
-//	pset(gst.tlx,gst.tly,8)
-//	pset(gst.trx,gst.try,9)
-//	pset(gst.blx,gst.bly,10)
-//	pset(gst.brx,gst.bry,11)
+	pset(gst.x,gst.y,7)
+	pset(gst.tlx,gst.tly,8)
+	pset(gst.trx,gst.try,9)
+	pset(gst.blx,gst.bly,10)
+	pset(gst.brx,gst.bry,11)
 end
 
 _cdir_tbl={
@@ -692,6 +728,10 @@ function cell_solid(cx,cy,ph)
 	local f=fget(m,0)
 	if f then
 		if ph then
+			if cy==8 then
+				log(cx..","..cy)
+				log("flg:"..tostr(fget(m,1)))
+			end
 			return not fget(m,1)
 		else
 			return true
@@ -709,8 +749,10 @@ end
 function wld_draw_cell(cx,cy,c)
 	local x=wld.ox+wld.cszx*cx
 	local y=wld.oy+wld.cszy*cy
+	local wx,wy=c2w(cx,cy)
 	rectfill(x,y,
 		x+wld.cszx-1,y+wld.cszy-1,c)
+	pset(wx,wy,7)
 end
 
 _btn_cdir={3,1,2,4}
