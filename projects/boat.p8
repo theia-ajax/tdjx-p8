@@ -1,6 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+music(0)
 function _init()
 	frame=0
 
@@ -24,6 +25,9 @@ function _init()
 	boat.hw=boat.w/2
 	boat.hh=boat.h/2
 	boat.r=0
+	boat.sailf=0
+	boat.sailospd=0.1
+	boat.sailcspd=0.05
 	boat.spd=0
 	boat.mxspd=0.5
 	boat.acl=.005
@@ -44,14 +48,20 @@ function _init()
 			m=flr(rnd(10))
 		})
 	end
+	
+	clouds={}
+	for i=0,20 do
+		add_cloud()
+	end
 end
 
 function _update60()
-	water.y=sin(t()/10)*12+100
+	water.y=sin(t()/20)*12+100
 
 	for i=0,water.vtct do
 		water.vts[i].y=water.y+
-			sin(t()/4+i/(water.vtct/1))*4
+			sin(t()/8+
+				i/(water.vtct/(1+sin(t()/40)*.4)))*4
 	end
 	
 	local ix,iy=0,0
@@ -64,15 +74,20 @@ function _update60()
 	
 	if btn(4) then
 	 boat.spd+=boat.acl
+	 boat.sailf+=boat.sailospd
 	else
 		boat.spd-=boat.fric
+		boat.sailf-=boat.sailcspd
 	end
+	
+	boat.sailf=clamp(boat.sailf,
+		0.3,1)
 	
 	boat.spd=clamp(boat.spd,0,boat.mxspd)
 	
 	boat.x+=boat.spd-boat.drag
 	
-	boat.x=clamp(boat.x,13,115)
+	boat.x=clamp(boat.x,13,72)
 	
 	local lx,ly=boat_left()
 	local rx,ry=boat_right()
@@ -87,6 +102,10 @@ function _update60()
 		r.x-=boat.spd/2
 	end
 	
+	for c in all(clouds) do
+		cloud_move(c,-boat.spd)
+	end
+	
 	frame+=1
 end
 
@@ -97,6 +116,15 @@ function _draw()
 	gradv(0,30,130,60,2,9)
 	gradv(0,60,130,127,9,8)
 
+	for star in all(stars) do
+		if frame%star.m~=0 then
+			pset(star.x,star.y,7)
+		end
+	end
+	
+	foreach(clouds,cloud_draw)
+
+
 	rectrfill(boat.x,boat.y,
 		boat.w,boat.h,boat.r,0)
 	
@@ -106,11 +134,9 @@ function _draw()
 		mastx+boat.x,masty+boat.y,0)
 		
 	local slcx,slcy=rotate(0,-13,boat.r)
-	local f=boat.spd/boat.mxspd
-	local frac=max(f*f,0.3)
 
 	rectrfill(slcx+boat.x,slcy+boat.y,
-		frac*12,12,boat.r,0)
+		boat.sailf*12,12,boat.r,0)
 
 	for r in all(rocks) do
 		circfill(r.x,r.y,8,4)
@@ -132,11 +158,6 @@ function _draw()
 		pset(x,water_y(x),c)
 	end
 	
-	for star in all(stars) do
-		if frame%star.m~=0 then
-			pset(star.x,star.y,7)
-		end
-	end
 	
 	print(boat.x..","..boat.y,0,0,7)
 	print(boat.spd,0,6,7)
@@ -146,6 +167,59 @@ function _draw()
 	print(mem,0,12,7)
 	print(cpu,0,18,7)
 end
+
+function add_cloud()
+	local cld={}
+	
+	cld.ct=flr(rnd(5))+3
+	cld.chunks={}
+	for i=1,cld.ct do
+		add(cld.chunks,{})
+	end
+	cld.spdscl=max(rnd(),.1)
+	
+	cloud_reset(cld)
+
+	cld.x=rnd(200)-36
+	cld.y=30+rnd(40)
+
+	add(clouds,cld)
+	return cld	
+end
+
+function cloud_reset(cld)
+	local chx,chy,r=0,0,0	
+	for i=1,cld.ct do
+		local chk=cld.chunks[i]
+		chk.x=chx
+		chk.y=chy
+		chk.r=4+flr(rnd(4))
+		r=rnd(.5)-.25
+		chx+=cos(r)*chk.r
+		chy+=sin(r)*chk.r
+	end
+	
+	cld.x=174
+end
+
+function cloud_move(cld,amt)
+	cld.x+=amt*cld.spdscl/4-.05
+	if cld.x<-36 then
+		cloud_reset(cld)
+	end
+end
+
+function cloud_draw(cld)
+	for chk in all(cld.chunks) do
+		local x=flr(cld.x+chk.x)
+		local y=flr(cld.y+chk.y)
+		circfill(x,y,chk.r,14)
+		circfill(x-flr(chk.r/3),
+			y+flr(chk.r/3),
+			chk.r,5)
+	end
+end
+
 
 function water_y(x)
 	if (x<0 or x>128) return 127
