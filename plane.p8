@@ -32,6 +32,9 @@ function _init()
 	plane.dashf=0
 	plane.dashx=0
 	plane.dashy=0
+	plane.smoke={}
+	plane.smokeivl=2
+	plane.smokef=0
 	
 	spouts={}
 
@@ -39,23 +42,25 @@ function _init()
 	for i=1,20 do
 		add_cloud()
 	end
-
-	mtns={}
-	for i=0,8 do
-		local mt=add(mtns,{
-			x=i*(20+rnd(10)),
-			y=99
-		})
-		mountain_reset(mt)
-	end	
 	
 	bullets={}
+	
+	mtpts={}
+	mtalt=50
+	mtmvivl=3
+	mtmvf=mtmvivl
+	for i=-1,128 do
+		mtpts[i]=mtalt
+		mtalt+=next_mt_height()
+	end
+
 end
 
 function _update()
 	gf+=1
 	
 	world_update()
+	tick_mountains()
 	
 	for c in all(clouds) do
 		cloud_move(c,-.1)
@@ -114,6 +119,32 @@ function _update()
 		plane.shotf=0
 	end
 	
+	-- tick plane smoke gen
+	plane.smokef-=1
+	if plane.smokef<=0 then
+		plane.smokef=plane.smokeivl
+		-- add smoke
+		add(plane.smoke,{
+			x=plane.x-4,
+			y=plane.y+flr(rnd(7))-3,
+			r=1,
+			dx=-2,
+			dy=0
+		})
+	end
+	
+	-- update smoke
+	for s in all(plane.smoke) do
+		s.r+=.2
+		s.dx+=rnd(.25)
+		s.dy-=.1
+		s.x+=s.dx
+		s.y+=s.dy
+		if s.dx>0 then
+			del(plane.smoke,s)
+		end
+	end
+	
 	foreach(bullets,bullet_update)
 	
 	for m in all(mtns) do
@@ -131,15 +162,13 @@ function _draw()
 	cls(12)
 
 	foreach(clouds,cloud_draw)
-
-	for m in all(mtns) do
-		draw_mountain(m.x,m.y,m.w,m.h)
-	end	
+	
+	draw_mountains()
 
 	rectfill(0,100,127,127,1)
 
 	if plane.dashf>0 then
-		pal(8,13)
+		pal(8,12)
 		pal(2,1)
 		if gf%2==0 then
 		spr(plane.sp,
@@ -157,12 +186,18 @@ function _draw()
 		plane.y-plane.hh)
 		
 	foreach(bullets,bullet_draw)
+
+	-- draw smoke
+	for s in all(plane.smoke) do
+		circ(s.x,s.y,s.r,0)
+	end
 		
 	foreach(spouts,spout_draw)
 	
 	print(stat(0),0,0,8)
 	print(stat(1),0,6,8)
 	print(stat(7),0,12,8)
+	print(100-mtalt,0,18,11)
 end
 
 function add_bullet(x,y)
@@ -183,7 +218,7 @@ function bullet_update(self)
 end
 
 function bullet_draw(self)
-	local cols={2,1,12,14}
+	local cols={2,8,10,9}
 	for i=1,#cols do
 		local ox=(i-1)*1
 		local oy=sin(t()*4+i/3.44)*0
@@ -217,30 +252,6 @@ end
 
 function spout_draw(self)
 	spr(self.sp,self.x,self.y)
-end
-
-function mountain_reset(mtn)
-	mtn=mtn or {}
-	
-	mtn.w=40+rnd(60)
-	mtn.h=20+rnd(40)
-	
-	return mtn
-end
-
-function draw_mountain(x,y,w,h)
-	local top=y-h
-	for i=-w/2,w/2 do
-		local x1,y1=x,top
-		local x2,y2=x+i,y
-		local c=6
-		if i<-w/2+8 then
-			c=5
-		elseif i<-8 then
-			c=13
-		end
-		line(x1,y1,x2,y2,c)
-	end
 end
 
 function add_chunk(id,x)
@@ -319,6 +330,48 @@ function cloud_draw(cld)
 	end
 end
 
+function tick_mountains()
+	mtmvf-=1
+	if mtmvf<=0 then
+		mtmvf=mtmvivl
+		for i=-1,127 do
+			mtpts[i]=mtpts[i+1]
+		end
+		mtalt+=next_mt_height()
+		mtpts[128]=mtalt	
+	end
+end
+
+function next_mt_height()
+	local height=100-mtalt
+
+	local roll=rnd(100)
+	local sign,mag=0,0
+	if roll<mtalt then
+		sign=-1
+	else
+		sign=1
+	end
+	if abs(roll-50)>30 then
+		mag=2+flr(rnd(3))
+	else
+		mag=flr(rnd(2))
+	end
+	return sign*mag
+end
+	
+function draw_mountains()
+	for x=0,128 do
+		local y=mtpts[x]
+		local py=mtpts[x-1]
+		line(x,y,x,100,13)
+		if py<y then
+			for i=0,1+abs(py-y) do
+				line(x-1,py+i,x,y+i,6)
+			end
+		end
+	end
+end
 -->8
 -- utilities
 
