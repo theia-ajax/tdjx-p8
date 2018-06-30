@@ -21,7 +21,7 @@ for j=1,count do
 	
 	for i=1,8 do
 		point={}
-		point.x=chain.bx+(i-1)*15
+		point.x=chain.bx+(i-1)*8
 		point.y=chain.by
 		if (i>1) then
 			dx=point.x-chain.points[i-1].x
