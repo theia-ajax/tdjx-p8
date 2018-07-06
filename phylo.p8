@@ -10,6 +10,10 @@ function _init()
  _ent_kind_map={}
  _ent_kind_map[6]=make_decay_block
 
+	log"◆ phylo by tdjx ◆"
+	log"       v 0.1"
+	log"-------------------------------"
+
 	-- player, enemies, etc...
 	actors={}
 	-- dynamic stage objects
@@ -501,6 +505,12 @@ function btnp(b,p)
 	p=p or 0
 	return btn(b,p) and
 		not _btns[p][b]
+end
+
+function btnr(b,p)
+	p=p or 0
+	return not btn(b,p) and
+		_btns[p][b]
 end
 
 function btnpoll()
