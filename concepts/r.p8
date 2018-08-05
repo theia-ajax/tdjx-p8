@@ -120,7 +120,7 @@ function _draw()
  			vy2a=-scl*2/wz2
  			vy2b=scl*2/wz2
 
-				for x=vx1,vx2 do
+				for x=vx1,vx2,max(wz1/10,1) do
 					local vt=(x-vx1)/(vx2-vx1)
 					line(x,lerp(vy1a,vy2a,vt),
 						x,lerp(vy1b,vy2b,vt),7+(i%8))
