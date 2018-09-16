@@ -4,19 +4,13 @@ __lua__
 function _init()
 	cam={x=0,y=0}
 
+	actors={}
+	daggers={}
+
 	player=make_player()
 	
-	daggers={}
-	
-	dudes={}
 	for i=1,3 do
-		add(dudes,{
-			x=rnd(16),
-			y=rnd(16),
-			w=0.5,
-			h=0.5,
-			sp=flr(rnd(2))+16
-		})
+		make_enemy("goblin",rnd(16),rnd(16))
 	end
 		
 	room={}
@@ -25,7 +19,15 @@ function _init()
 end
 
 function _update60()
-	update_player(player)
+	local actors_rq={}
+	for i,a in pairs(actors) do
+		update_actor(a)
+		if actor_hasf(a,k_actf_dead)
+		then
+			add(actors_rq,i)
+		end
+	end
+	
 	
 	if player.x>(room.rx+1)*16 then
 		change_room(room.rx+1,room.ry)
@@ -39,14 +41,16 @@ function _update60()
 		change_room(room.rx,room.ry-1)
 	end
 	
-	local rq={}
+	local daggers_rq={}
 	for i,dg in pairs(daggers) do
 		update_dagger(dg)
 		if dg.destroy then
-			add(rq,i)
+			add(daggers_rq,i)
 		end
 	end
-	idelfa(daggers,rq)
+	
+	idelfa(actors,actors_rq)
+	idelfa(daggers,daggers_rq)
 end
 
 function _draw()
@@ -55,11 +59,8 @@ function _draw()
 	camera(cam.x*8,cam.y*8)
 	
 	map(room.rx*16,room.ry*16,cam.x*8,cam.y*8,16,16)
-	draw_player(player)
+	foreach(actors,draw_actor)
 	foreach(daggers,draw_dagger)
-	for d in all(dudes) do
-		spr(d.sp,d.x*8,d.y*8)
-	end
 	
 	camera()
 	print("pos:"..player.x..","..player.y,0,0,7)
@@ -77,104 +78,8 @@ k_right=1
 k_up=2
 k_down=3
 
-k_flags_fly=shl(1,0)
 
-function make_actor(x,y,w,h,f)
-	return {
-		x=x or 0,y=y or 0,
-		w=w or 1/2,h=h or 1/2,
-		mdir=-1,
-		fdir=f or 0,
-		flags=0,
-		input={x=0,y=0},
-		ctrl=nil,
-	}
-end
-
-function update_actor(a)
-	if a.ctrl~=nil then
-		a.ctrl(a)
-	end
-	
-	local ix,iy=a.input.x,a.input.y
-	
-	-- todo: better
-	if ix~=0 and iy~=0 then
-		iy=0
-	end
-		
-	local req=-1
-	if (ix<0) req=0
-	if (ix>0) req=1
-	if (iy<0) req=2
-	if (iy>0) req=3
-	
-	a.mdir=req
-	if a.mdir>=0 then
-		a.fdir=a.mdir
-	end
-
-	local mx,my=card_to_vel(a.mdir)
-
-	-- move to center of tile
-	-- if not aligned along tile
-	-- as movement is requested
-	-- regardless of whether
-	-- movement happens
-	-- to make it possible to
-	-- easily maneuver around
-	-- corners
-	if mx~=0 then
-		local tgy=round(a.y)
-		a.y=moveto(a.y,tgy,1/16)
-	elseif my~=0 then
-		local tgx=round(a.x)
-		a.x=moveto(a.x,tgx,1/16)
-	end
-
-	local spd=0.1
-	a.dx=mx*spd
-	a.dy=my*spd
-	
-	if area_solid(a.x+a.dx,a.y+a.dy,7/8,7/8) then
-		a.dx=0
-		a.dy=0
-	end
-	
-	a.x+=a.dx
-	a.y+=a.dy
-end
-
-function make_player()
-	local pl=make_actor(8,8)
-	
-	return pl
-end
-
-function update_player(pl)
-	local ix,iy=0,0
-	if (btn(0)) ix-=1
-	if (btn(1)) ix+=1
-	if (btn(2)) iy-=1
-	if (btn(3)) iy+=1
-	
-	pl.input.x,pl.input.y=ix,iy
-
-	update_actor(pl)
-
-	if (btnp(4)) then
-		local sx,sy=card_to_vel(pl.fdir)
-		local dgx,dgy=pl.x+sx*.25+3/8,
-			pl.y+sy*.25+3/8
-		make_dagger(dgx,dgy,pl.fdir)	
-	end
-end
-
-function draw_player(pl)
-	spr(8,
-		pl.x*8,pl.y*8)
-	pset(pl.x*8,pl.y*8,11)
-end
+-- daggers
 
 -- spawn x,y
 -- cdir: cardinal direction
@@ -227,13 +132,7 @@ function draw_dagger(dg)
 	spr(sp,x,y,1,1,flx,fly)
 end
 
-function card_to_vel(cdir)
-	if cdir==0 then return -1,0
-	elseif cdir==1 then return 1,0
-	elseif cdir==2 then return 0,-1
-	elseif cdir==3 then return 0,1
-	else return 0,0 end
-end
+
 -->8
 -- utils
 
@@ -393,6 +292,13 @@ function idelfa(arr, idx)
 end
 -----------------------------------
 
+function card_to_vel(cdir)
+	if cdir==0 then return -1,0
+	elseif cdir==1 then return 1,0
+	elseif cdir==2 then return 0,-1
+	elseif cdir==3 then return 0,1
+	else return 0,0 end
+end
 -->8
 -- physics
 
@@ -407,6 +313,155 @@ function solid(x,y)
 	return fget(mget(flr(x),flr(y)),0)
 end
 
+-->8
+-- actors
+
+-- actor flags
+k_actf_dead=shl(1,0)
+k_actf_fly=shl(1,1)
+
+function make_actor(x,y,w,h,f)
+	return add(actors,{
+		x=x or 0,y=y or 0,
+		w=w or 1/2,h=h or 1/2,
+		mdir=-1,
+		fdir=f or 0,
+		flags=0,
+		input={x=0,y=0},
+		ctrl=nil,
+	})
+end
+
+function actor_setf(a,f)
+	a.flags=bor(a.flags,f)
+end
+
+function actor_unsetf(a,f)
+	a.flags=band(a.flags,bnot(f))
+end
+
+function actor_hasf(a,f)
+	return band(a.flags,f)~=0
+end
+
+function update_actor(a)
+	if a.ctrl~=nil then
+		a.ctrl(a)
+	end
+	
+	local ix,iy=a.input.x,a.input.y
+	
+	-- todo: better
+	if ix~=0 and iy~=0 then
+		iy=0
+	end
+		
+	local req=-1
+	if (ix<0) req=0
+	if (ix>0) req=1
+	if (iy<0) req=2
+	if (iy>0) req=3
+	
+	a.mdir=req
+	if a.mdir>=0 then
+		a.fdir=a.mdir
+	end
+
+	local mx,my=card_to_vel(a.mdir)
+
+	-- move to center of tile
+	-- if not aligned along tile
+	-- as movement is requested
+	-- regardless of whether
+	-- movement happens
+	-- to make it possible to
+	-- easily maneuver around
+	-- corners
+	if mx~=0 then
+		local tgy=round(a.y)
+		a.y=moveto(a.y,tgy,1/16)
+	elseif my~=0 then
+		local tgx=round(a.x)
+		a.x=moveto(a.x,tgx,1/16)
+	end
+
+	local spd=0.1
+	a.dx=mx*spd
+	a.dy=my*spd
+	
+	if area_solid(a.x+a.dx,a.y+a.dy,7/8,7/8) then
+		a.dx=0
+		a.dy=0
+	end
+	
+	a.x+=a.dx
+	a.y+=a.dy
+end
+
+function draw_actor(a)
+	if a.draw then
+		a.draw(a)
+	else
+		spr(a.sp,a.x*8,a.y*8)
+	end
+end
+
+-- player
+function make_player()
+	local pl=make_actor(8,8)
+	pl.ctrl=ctrl_player
+	pl.draw=draw_player
+	return pl
+end
+
+function ctrl_player(pl)
+	local ix,iy=0,0
+	if (btn(0)) ix-=1
+	if (btn(1)) ix+=1
+	if (btn(2)) iy-=1
+	if (btn(3)) iy+=1
+	
+	pl.input.x,pl.input.y=ix,iy
+	
+	if (btnp(4)) then
+		local sx,sy=card_to_vel(pl.fdir)
+		local dgx,dgy=pl.x+sx*.25+3/8,
+			pl.y+sy*.25+3/8
+		make_dagger(dgx,dgy,pl.fdir)	
+	end
+end
+
+function draw_player(pl)
+	spr(8,
+		pl.x*8,pl.y*8)
+	pset(pl.x*8,pl.y*8,11)
+end
+
+-- enemies
+
+function make_enemy(kind,x,y,f)
+	local fn=_k_enemy_table[kind]
+	assert(fn)
+	return fn(x,y,f)
+end
+
+function make_goblin(x,y,f)
+	local gb=make_actor(x,y,0.5,0.5,f)
+	gb.sp=17
+	gb.ctrl=ctrl_goblin
+	return gb
+end
+
+function ctrl_goblin(gb)
+end
+
+_k_enemy_table={}
+_k_enemy_table["goblin"]=
+	make_goblin
+-->8
+-- todo
+
+-- enemies as actors
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000ccccc0000000000999999990000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000ccc0000000000944444490000000000000000000000000000000000000000
