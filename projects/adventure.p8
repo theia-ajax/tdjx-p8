@@ -9,7 +9,7 @@ function _init()
 
 	player=make_player()
 	
-	for i=1,0 do
+	for i=1,3 do
 		local tx,ty=rnd_tile_pos()
 		gob=make_enemy("goblin",tx,ty)
 	end
@@ -31,14 +31,7 @@ function rnd_tile_pos()
 end
 
 function _update60()
-	local actors_rq={}
-	for i,a in pairs(actors) do
-		update_actor(a)
-		if hasf(a.flags,k_actf_dead)
-		then
-			add(actors_rq,i)
-		end
-	end
+	foreach(actors,update_actor)
 	
 	if player.x>(room.rx+1)*16 then
 		change_room(room.rx+1,room.ry)
@@ -55,8 +48,14 @@ function _update60()
 	local daggers_rq={}
 	for i,dg in pairs(daggers) do
 		update_dagger(dg)
-		if dg.destroy then
-			add(daggers_rq,i)
+		if (dg.destroy) add(daggers_rq,i)
+	end
+	
+	local actors_rq={}
+	for i,a in pairs(actors) do
+		if hasf(a.flags,k_actf_dead)
+		then
+			add(actors_rq,i)
 		end
 	end
 	
@@ -74,6 +73,9 @@ function _draw()
 	foreach(daggers,draw_dagger)
 	
 	camera()
+	
+	print("pos:"..player.x..","..player.y,0,0,7)
+	draw_console()
 end
 
 function change_room(x,y)
@@ -91,16 +93,21 @@ k_down=3
 
 -- daggers
 
+dagger_id=0
+
 -- spawn x,y
 -- cdir: cardinal direction
 --		0 right, 1 left, 2 up, 3 down
 function make_dagger(x,y,cdir)
+	dagger_id+=1
+
 	local dg={}
 	dg.x=x
 	dg.y=y
+	dg.id=dagger_id
 	dg.cdir=cdir
 	dg.dx,dg.dy=card_to_vel(dg.cdir)
-	dg.spd=0.8
+	dg.spd=0.3
 	dg.dx*=dg.spd
 	dg.dy*=dg.spd
 	
@@ -121,6 +128,22 @@ function update_dagger(dg)
 	dg.dx*=dg.spd
 	dg.dy*=dg.spd
 
+	local tlx,tly=dg.x-dg.w,
+		dg.y-dg.h
+	
+	if area_solid(tlx,tly,dg.w,dg.h)
+	then
+		dg.destroy=true
+	end
+	
+	for i,a in pairs(actors) do
+		if dagger_hit_actor(dg,a)
+		then
+			actor_hit(a,1)
+			dg.destroy=true
+		end
+	end
+
 	dg.x+=dg.dx
 	dg.y+=dg.dy
 	
@@ -128,6 +151,12 @@ function update_dagger(dg)
 	if dg.life_t<=0 then
 		dg.destroy=true
 	end
+end
+
+function dagger_hit_actor(dg,a)
+	return hasf(a.flags,k_actf_enemy)
+		and actor_overlap(a,dg.x-dg.w,
+			dg.y-dg.h,dg.w,dg.h)
 end
 
 function draw_dagger(dg)
@@ -140,6 +169,8 @@ function draw_dagger(dg)
 	if (dg.cdir>1) sp=25
 	
 	spr(sp,x,y,1,1,flx,fly)
+	
+	rect(x,y,x+dg.w*16,y+dg.h*16,7)
 end
 
 
@@ -177,6 +208,17 @@ end
 function round(v)
 	if v-flr(v)<0.5 then
 		return flr(v)
+	else
+		return ceil(v)
+	end
+end
+
+function roundh(v)
+	local l=flr(v)
+	if v-l<0.167 then
+		return l
+	elseif v-l<0.833 then
+		return l+0.5
 	else
 		return ceil(v)
 	end
@@ -317,6 +359,23 @@ function idelfa(arr, idx)
 end
 -----------------------------------
 
+-- console
+_console={}
+function log(m)
+	add(_console,m)
+	if #_console>20 then
+		idel(_console,1)
+	end
+end
+
+function draw_console()
+	for i=1,#_console do
+		local msg=_console[i]
+		print(msg,127-#msg*4,(i-1)*6,7)
+	end
+end
+-------------------------------
+
 function card_to_vel(cdir)
 	if cdir==0 then return -1,0
 	elseif cdir==1 then return 1,0
@@ -374,31 +433,42 @@ end
 -- actor flags
 k_actf_dead=shl(1,0)
 k_actf_fly=shl(1,1)
+k_actf_enemy=shl(1,2)
 
 -- actor constants
 -- rate that an actor slides
 -- to match the tile along
 -- current axis
 -- see update_actor for details
-k_act_slide_rate=1/32
+k_act_slide_rate=1/16
 
-function make_actor(x,y,w,h,f)
+function make_actor(x,y,w,h,f,life)
+	life=life or 3
 	return add(actors,{
 		x=x or 0,y=y or 0,
-		w=w or 1/2,h=h or 1/2,
+		w=w or 1,h=h or 1,
 		dx=0,dy=0,
 		mdir=-1,
 		fdir=f or 0,
 		flags=0,
 		input={x=0,y=0},
 		ctrl=nil,
-		spd=0.1
+		spd=0.1,
+		spd_mul=1,
+		life_mx=life,
+		life=life,
+		hit_t=0,
+		hit_stun_f=15
 	})
 end
 
 function update_actor(a)
 	if a.ctrl~=nil then
 		a.ctrl(a)
+	end
+	
+	if a.hit_t>0 then
+		a.hit_t-=1
 	end
 	
 	local ix,iy=a.input.x,a.input.y
@@ -437,8 +507,12 @@ function update_actor(a)
 		a.x=moveto(a.x,tgx,k_act_slide_rate)
 	end
 
-	a.dx=mx*a.spd
-	a.dy=my*a.spd
+	local spd=a.spd*a.spd_mul
+	
+	if (a.hit_t>0) spd=0
+
+	a.dx=mx*spd
+	a.dy=my*spd
 	
 	if actor_move_solid(a) then
 		a.dx=0
@@ -455,12 +529,39 @@ function actor_move_solid(a,dx,dy)
 	return area_solid(a.x+dx,a.y+dy,7/8,7/8)
 end
 
+function actor_overlap(a,x,y,w,h)
+	return a.x+a.w>=x and
+		a.y+a.h>=y and
+		a.x<=x+w and
+		a.y<=y+h
+end
+
+function actor_hit(a,dmg)
+	if a.hit_t<=0 then
+		a.life-=dmg
+		a.hit_t=a.hit_stun_f
+		if a.life<=0 then
+			a.flags=setf(a.flags,k_actf_dead)
+		end
+	end
+end
+
 function draw_actor(a)
+	if a.hit_t>0 then
+		for i=0,15 do
+			pal(i,7)
+		end
+	end
+
 	if a.draw then
 		a.draw(a)
 	else
 		spr(a.sp,a.x*8,a.y*8)
 	end
+	
+	rect(a.x*8,a.y*8,(a.x+7/8)*8,(a.y+7/8)*8,11)
+	
+	pal()
 end
 
 -- player
@@ -470,6 +571,7 @@ function make_player()
 	pl.draw=draw_player
 	pl.sp_t=0
 	pl.sp_r=0.13
+	pl.dagger_t=0
 	return pl
 end
 
@@ -479,21 +581,31 @@ function ctrl_player(pl)
 	if (btn(1)) ix+=1
 	if (btn(2)) iy-=1
 	if (btn(3)) iy+=1
-	
+
 	pl.input.x,pl.input.y=ix,iy
+	
+	if pl.dagger_t<=0 then
+		pl.spd_mul=1
+	else
+		pl.spd_mul=0
+		pl.dagger_t-=1
+	end
 	
 	if ix~=0 or iy~=0 then
 		pl.sp_t+=pl.sp_r
 		if pl.sp_t>=2 then
 			pl.sp_t-=2
 		end
+	else
+		pl.sp_t=0
 	end
 	
 	if (btnp(4)) then
 		local sx,sy=card_to_vel(pl.fdir)
 		local dgx,dgy=pl.x+sx*.25+3/8,
 			pl.y+sy*.25+3/8
-		make_dagger(dgx,dgy,pl.fdir)	
+		make_dagger(dgx,dgy,pl.fdir)
+		pl.dagger_t=8
 	end
 end
 
@@ -516,16 +628,19 @@ end
 
 -- enemies
 
-function make_enemy(kind,x,y,f)
-	local fn=_k_enemy_table[kind]
+function make_enemy(kind,...)
+	local fn=k_emake[kind]
 	assert(fn)
-	return fn(x,y,f)
+	local e=fn(...)
+	e.flags=setf(e.flags,k_actf_enemy)
+	return e
 end
 
 function make_goblin(x,y,f)
 	local gb=make_actor(x,y,0.5,0.5,f)
 	gb.sp=17
 	gb.spd=0.05
+	gb.spd_mul=0
 	gb.ctrl=ctrl_goblin
 	gb.t0=irand(60,300)
 	return gb
@@ -549,9 +664,8 @@ function ctrl_goblin(gb)
 	gb.input.y=fy
 end
 
-_k_enemy_table={}
-_k_enemy_table["goblin"]=
-	make_goblin
+k_emake={}
+k_emake["goblin"]=make_goblin
 -->8
 -- todo
 
