@@ -5,13 +5,15 @@ cartloadtext="adventure.p8"
 
 function _init()
 	ui_init()
-	--reload(0x0000,0x0000,0x2000,"adventure.p8")
 	
 	txtbl=nil
+	actv_trn=nil
+	actv_x=-1
+	actv_y=-1
 	loaded=false
 end
 
-function _update()
+function _update60()
 	ui_update()
 
 	if ui_keyboard_focused() then
@@ -29,52 +31,44 @@ function _update()
 		run()
 	end
 	
-	if ui_button(98,9,"save",{w=29,off=not txtbl}) then
-		write_tx_table(txtbl)
+	if txtbl then
+		show_room_controls()
 	end
 	
-	if txtbl then
-		show_tx_controls()
+	if actv_trn then
+		show_tx_controls(actv_trn)
 	end
 end
 
-function show_tx_controls()
-	local i=1
+function show_room_controls()
 	for ry=0,3 do
 		for rx=0,7 do
-			local ox=rx*16
-			local oy=ry*18+56
 			local tx=txtbl[ry+1][rx+1]
-//				rectfill(ox,oy,ox+15,oy+15,0)
-//				rect(ox,oy,ox+15,oy+15,7)
-			--print(tx.cart,ox,oy,7)
-			local changed=false
-			if ui_button(ox+5,oy,tostr(tx.cart),
-				{nobdr=true})
+			local col=6
+			if (actv_trn==tx) col=9
+			if ui_button(rx*16,ry*10+88,rx..","..ry,{bgcol=col})
 			then
-				tx.cart+=1
-				if (tx.cart>7) tx.cart=0
-				changed=true
+				actv_trn=tx
+				actv_x=rx
+				actv_y=ry
 			end
-			if ui_button(ox+2,oy+8,tostr(tx.rx),
-				{nobdr=true})
-			then
-				tx.rx+=1
-				if (tx.rx>7) tx.rx=0
-				changed=true
-			end
-			if ui_button(ox+8,oy+8,tostr(tx.ry),
-				{nobdr=true})
-			then
-				tx.ry+=1
-				if (tx.ry>3) tx.ry=0
-				changed=true
-			end
-			
-			if (changed) write_tx_table(txtbl)
-			i+=1
 		end
 	end
+end
+
+function show_tx_controls(tx)
+	local ox=71
+	local oy=20
+	
+	tx.cart=number_control("cart id:",tx.cart,ox,oy,0,7)
+	tx.rx=number_control("room x:",tx.rx,ox,oy+8,0,7)
+	tx.ry=number_control("room y:",tx.ry,ox,oy+16,0,3)
+	tx.tx=number_control("tile x:",tx.tx,ox,oy+24,0,15)
+	tx.ty=number_control("tile y:",tx.ty,ox,oy+32,0,15)
+	
+	write_tx_table(txtbl)
+
+	if (changed) write_tx_table(txtbl)
 end
 
 function load_cart_data(cart)
@@ -89,26 +83,46 @@ function _draw()
 	fillp()
 	
 	if txtbl then
-		vx,vy=48,12
-		rect(vx,vy,vx+33,vy+33,7)
-		palt(0,false)
-		sspr(120,56,8,8,vx+1,vy+1,32,32)
-		palt()
-	
-		rectfill(0,56,127,127,0)
-		rect(0,55,127,127,7)
-		for x=1,7 do
-			line(x*16,56,x*16,127,7)
-		end
-		for y=1,3 do
-			line(0,y*18+55,127,y*18+55,7)
-		end
+		draw_table_view(0,24)
 	end
 	
 	ui_flush()
 	
 	circ(mx(),my(),1,7)
 end
+
+function draw_table_view(vx,vy)
+	rect(vx,vy,vx+65,vy+33,7)
+	palt(0,false)
+	sspr(112,56,16,8,vx+1,vy+1,64,32)
+	palt()
+	
+	if actv_trn then
+		local col=actv_x%4*2
+		local row=actv_y*2+flr(actv_x/4)
+		local xx=vx+col*8
+		local yy=vy+row*4
+		rect(xx,yy,xx+17,yy+5,10)
+	end
+end
+
+function number_control(label,val,x,y,mn,mx)
+	local v=val
+	ui_label(x,y+2,label)
+	local bx=33+x
+	local vs=tostr(val)
+	ui_label(bx+10-(#vs-1)*2,y+2,vs)
+	if ui_button(bx,y,"-",{nobdr=true}) then
+		v-=1
+	end	
+	if ui_button(bx+16,y,"+",{nobdr=true}) then
+		v+=1
+	end
+	if (v<mn) v=mx
+	if (v>mx) v=mn
+	return v
+end
+
 
 -->8
 function ui_init()
@@ -121,6 +135,7 @@ function ui_init()
 		drawtbl={
 			_ui_draw_button,
 			_ui_draw_text,
+			_ui_draw_label,
 		},
 	}
 end
@@ -138,6 +153,7 @@ end
 
 k_ui_etype_button=1
 k_ui_etype_text=2
+k_ui_etype_label=3
 
 _ui_queue={}
 
@@ -190,6 +206,7 @@ function ui_button(x,y,text,props)
 		etype=k_ui_etype_button,
 		x=x,y=y,w=w,h=h,
 		text=text,state=state,
+		bgcol=props.bgcol or 6,
 		nobdr=props.nobdr or false,
 	})
 	
@@ -241,8 +258,21 @@ function ui_text(text,x,y,w,h,props)
 	return text
 end
 
+function ui_label(x,y,text,props)
+	props=props or {}
+	col=props.col or 7
+	w=props.w or #text*4
+	h=props.h or 6
+	
+	ui_push({
+		etype=k_ui_etype_label,
+		x=x,y=y,w=w,h=h,text=text,
+		col=col
+	})
+end
+
 function _ui_draw_button(ui)
-	local c1,c2,c3,c4=7,5,6,0
+	local c1,c2,c3,c4=7,5,ui.bgcol,0
 	if ui.state==1 then
 		c1,c2,c3,c4=5,7,13,12
 	elseif ui.state==2 then
@@ -281,6 +311,10 @@ function _ui_draw_text(ui)
 			rectfill(cx,ty,cx+3,ty+4,9)
 		end
 	end
+end
+
+function _ui_draw_label(ui)
+	print(ui.text,ui.x,ui.y,ui.col)
 end
 
 function ui_keyboard_focused()
@@ -329,50 +363,83 @@ function ui_selected(id)
 end
 
 -->8
-function encode_tx(cart,rx,ry)
-	-- 8 bits
-	-- 0-2: cart id (3 bits)
-	--	3-5: room x  (3 bits)
-	--	6-7: room y  (2 bits)
+-- cart transition tables
+
+-- encodes transition
+-- cart: cartid 0-7
+-- room coordinates on map
+--	each room is 1 16x16 screen
+-- rx:		 room x 0-7
+-- ry:			room y 0-3
+-- tile to place player in room
+-- tx:			tile x 0-15
+-- ty:			tile y 0-15
+-- encoded into two bytes
+function encode_tx(cart,rx,ry,tx,ty)
+	-- byte 1
+	-- bits 0-2: cart id
+	--	bits 3-5: room x
+	--	bits 6-7: room y
+	-- 
+	-- byte 2
+	-- bits 0-3: tile y
+	-- bits 4-7: tile x
 
 	cart=band(cart,0x7)
 	rx=band(rx,0x7)
 	ry=band(ry,0x3)
 	
-	-- cart << 5 + rx << 3 + ry
+	tx=band(tx,0xf)
+	ty=band(ty,0xf)
+	
+	-- cart << 5 + rx << 3 + ry,
+	-- ty << 4 + tx
 	return bor(
-		bor(shl(cart,5),shl(rx,2)),
-		ry)
+			bor(shl(cart,5),
+				shl(rx,2)),
+			ry),
+		bor(shl(ty,4),tx)
 end
 
-function decode_tx(tx)
-	return shr(band(tx,0xe0),5),
-		shr(band(tx,0x1c),2),
-		band(tx,0x3)	
+-- rb: room byte (cart, room xy)
+-- tb: tile byte (tile xy)
+function decode_tx(rb,tb)
+	return {
+		cart=shr(band(rb,0xe0),5),
+		rx=shr(band(rb,0x1c),2),
+		ry=band(rb,0x3),
+		tx=band(tb,0x0f),
+		ty=shr(band(tb,0xf0),4),
+	}
 end
 
-_txtbl_off=0x0e3c
+_txtbl_off=0x0e38
 
 -- rx: 0-7
 -- ry: 0-3
 function tx_room_addr(rx,ry)
-	local row=ry*2
+	local row=ry*2+flr(rx/4)
 	if (rx>3) row+=1
-	return _txtbl_off+row*64+rx%4
+	return _txtbl_off+row*64+(rx%4)*2
 end
 
 -- txtbl, array of 32 elements
 -- each element should include:
--- cart id (0-7), room x (0-7), room y (0-3)
+-- 	cart: cart id (0-7),
+--		rx: room x (0-7),
+--		ry: room y (0-3),
+--		tx: tile x (0-15),
+--		ty: tile y (0-15)
 function write_tx_table(txtbl)
 	for y=0,3 do
 		local row=txtbl[y+1]
 		for x=0,7 do
-			local tx=row[x+1]
-			local val=encode_tx(
-				tx.cart,tx.rx,tx.ry)
+			local trn=row[x+1]
+			local b1,b2=encode_tx(
+				trn.cart,trn.rx,trn.ry,trn.tx,trn.ty)
 			local addr=tx_room_addr(x,y)
-			poke(addr,val)
+			poke(addr,b1)
+			poke(addr+1,b2)
 		end
 	end
 end
@@ -382,10 +449,11 @@ function read_tx_table()
 	for y=0,3 do
 		local row=add(ret,{})
 		for x=0,7 do
-			local tx=add(row,{})
 			local addr=tx_room_addr(x,y)
-			tx.cart,tx.rx,tx.ry=
-				decode_tx(peek(addr))
+			local tx=decode_tx(
+				peek(addr),
+				peek(addr+1))
+			add(row,tx)
 		end
 	end
 	return ret
@@ -405,6 +473,7 @@ function build_tx_table()
 					local m=mget(xx,yy)
 					if fget(m,7) then
 						tx.rx,tx.ry=rx,ry
+						tx.tx,tx.ty=xx,yy
 					end
 				end
 			end
