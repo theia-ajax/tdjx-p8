@@ -26,6 +26,7 @@ function _init()
 	g={
 		move_lock=false,
 		cls_base=3,
+		bg_tile=0,
 		fade_t=0,
 		cr_payload={}
 	}
@@ -36,8 +37,6 @@ function _init()
 		"adv_maps_2.p8",
 	}
 	
-	_active_cart=-1
-
 	cam={x=0,y=0}
 
 	actors={}
@@ -46,7 +45,7 @@ function _init()
 	player=make_player()
 	
 	rooms={}
-	txtbl=read_tx_table()
+	load_cart_config()
 	load_rooms(0)
 	
 	room=find_room(0,0)
@@ -55,16 +54,26 @@ function _init()
 	sleep_t=0
 end
 
+function load_cart_config()
+	g.cls_base=band(peek(52+56*64),0xf)
+	g.bg_tile=peek(52+56*64+1)
+	txtbl=read_tx_table()
+end
+
 function load_rooms(cartid)
-	cartid=cartid or 0	
+	cartid=cartid or 0
 	
 	if _active_cart==cartid then
 		return
 	end
 
 	_active_cart=cartid
-	reload(0x800,0x0800,0x2200,carts[_active_cart+1])
-	txtbl=read_tx_table()
+	reload(0x800,0x0800,0x3000,carts[_active_cart+1])
+
+	load_cart_config()
+	
+	g.cls_base=band(peek(52+56*64),0xf)
+	g.bg_tile=peek(52+56*64+1)
 	
 	local cart=carts[_active_cart+1]
 
@@ -81,7 +90,7 @@ function load_rooms(cartid)
 			for xx=x,x+15 do
 				for yy=y,y+15 do
 					if mget(xx,yy)==17 then
-						mset(xx,yy,0)
+						mset(xx,yy,g.bg_tile)
 						add(rm.spawns,
 							{t="goblin",x=xx,y=yy})
 					end
@@ -102,8 +111,6 @@ function onkey(key)
 		_dbg_deep=not _dbg_deep
 	elseif key=="-" then
 		_console={}
-	elseif key=="j" then
-		load_maps("maps_00.p8",true)
 	end
 end
 
@@ -177,7 +184,7 @@ end
 function _draw()
 	if (sleep_t>0) return
 
-	g.cls_base=band(peek(0x0e3c-0x40),0xf)
+	
 
 	local cl=fade_col(g.cls_base,
 		g.fade_t)
@@ -188,6 +195,7 @@ function _draw()
 	camera(cam.x*8,cam.y*8)
 
 	pal(14,0)
+	--map(112,48,0,0,16,16)
 	map(0,0,0,0,128,64)
 --	map(room.rx*16,room.ry*16,cam.x*8,cam.y*8,16,16)
 	foreach(actors,draw_actor)
@@ -200,9 +208,20 @@ function _draw()
 --	print("pos:"..player.x..","..player.y,0,0,7)
 	draw_console()
 	
+	--[[local i=0
+	for k,v in pairs(room.tx) do
+		print(tostr(k)..":"..tostr(v),
+			0,i*6,7)
+		i+=1
+	end]]
+	
+	print(g.bg_tile,0,0)
+	
 	if _dbg_fbf then
 		print("fbf",117,123,8)
 	end
+	
+	draw_perf()
 end
 
 function wait_frames(n)
@@ -455,6 +474,20 @@ function dbg_tbl(t)
 	for k,v in pairs(t) do
 		printh("\t"..tostr(k)..": "..tostr(v))
 	end
+end
+
+function draw_perf()
+	local mem=flr(stat(0))
+	local cpu=flr(stat(1)*100)
+	local sys=flr(stat(2)*100)
+	
+	local mems="mem:"..tostr(mem).."/2048"
+	local cpus="cpu:"..tostr(cpu).."%"
+	local syss="sys:"..tostr(sys).."%"
+	
+	print(mems,128-#mems*4,0,11)
+	print(cpus,128-#cpus*4,6,11)
+	print(syss,128-#syss*4,12,11)
 end
 -->8
 -- utils
@@ -1317,8 +1350,9 @@ _txtbl_off=0x0e38
 -- ry: 0-3
 function tx_room_addr(rx,ry)
 	local row=ry*2+flr(rx/4)
-	if (rx>3) row+=1
-	return _txtbl_off+row*64+(rx%4)*2
+	return _txtbl_off+
+		(ry*2+flr(rx/4))*64+	-- row
+		(rx%4)*2													-- col
 end
 
 -- txtbl, array of 32 elements
@@ -1437,7 +1471,7 @@ dfffdfdfdddfffffddddfdfffffddfdf000000000000000000000000000000001111111111111111
 fffffffdfffdffdfdddfdfdfdfffddd50000000000000000000000000000000011111c1c11111c1c11111c1c11111c1c00000000000000000000000000000000
 ffdfffffffdfffff55dddffffffddd5d00000000000000000000000000000000111111c1111111c1111111c1111111c100000000000000000000000000000000
 fffffdffffffdfff5d5fdfffffdfdd55000000000000000000000000000000001111111111111111411111111111111400000000000000000000000000000000
-fddfffff000000000000000000000000000000000000000000000000000000001111111100000000000000000000000000000000000000000000504100000000
+fddfffff00000000000000000000000000000000000000000000000000000000111111110000000000000000000000000000000030000000000042b100000000
 ffffffff000000000000000000000000000000000000000000000000000000001c1c111100000000000000000000000000000000000000000000000000000000
 ffffffff0000000000000000000000000000000000000000000000000000000011c1111100000000000000000000000000000000000000000000000000000000
 ffffdffd000000000000000000000000000000000000000000000000000000001111111100000000000000000000000000000000000000000000000000000000

@@ -88,6 +88,31 @@ function _draw()
 	
 	ui_flush()
 	
+	if txtbl and btn(5) then
+		rectfill(0,0,127,127,0)
+		local i=0
+--[[		print("rows:"..#txtbl,0,0,7)
+		for y=1,#txtbl do
+			print("row "..y..":"..#txtbl[y],0,y*6,7)
+		end]]
+		for y=1,4 do
+			for x=1,8 do
+				local col=7
+				if (actv_x==x-1 and actv_y==y-1) col=10
+				local tx=txtbl[y][x]
+				print(x..","..y..":"..tx.cart..tx.rx..tx.ry..hex(tx.tx)..hex(tx.ty),flr(i/16)*64,(i%16)*6,col)
+				i+=1
+			end
+		end
+	end
+	
+
+	if btn(4) then
+		palt(0,false)
+		sspr(0,0,128,128,0,0,128,128)
+		palt()
+	end
+	
 	circ(mx(),my(),1,7)
 end
 
@@ -123,7 +148,16 @@ function number_control(label,val,x,y,mn,mx)
 	return v
 end
 
+_hex_table={
+	"0","1","2","3",
+	"4","5","6","7",
+	"8","9","a","b",
+	"c","d","e","f"
+}
 
+function hex(val)
+	return _hex_table[val+1]
+end
 -->8
 function ui_init()
 	poke(0x5f2d,1)
@@ -419,8 +453,9 @@ _txtbl_off=0x0e38
 -- ry: 0-3
 function tx_room_addr(rx,ry)
 	local row=ry*2+flr(rx/4)
-	if (rx>3) row+=1
-	return _txtbl_off+row*64+(rx%4)*2
+	return _txtbl_off+
+		(ry*2+flr(rx/4))*64+	-- row
+		(rx%4)*2													-- col
 end
 
 -- txtbl, array of 32 elements
