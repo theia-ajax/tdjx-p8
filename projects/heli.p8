@@ -34,6 +34,7 @@ function _init()
 	
 	bullets={}
 	monsters={}
+	pulses={}
 	
 	for i=1,20 do
 		add_monster(flr(rnd(128)),flr(rnd(64)))
@@ -49,6 +50,10 @@ function _update60()
 	
 	update_heli(heli)
 	update_bullets()
+	update_monsters()
+	update_pulses()
+	
+	find_bullet_hits()
 	
 	cam.x=mid(0,heli.x*8-64,112*8)
 	cam.y=mid(0,heli.y*8-64,48*8)
@@ -63,11 +68,43 @@ function _draw()
 	cls()
 
 	map(0,0,-cam.x,-cam.y,128,64)
-	foreach(monsters,draw_monster)
+	draw_monsters()
 	draw_bullets()
 	draw_heli(heli)
+	draw_pulses()
+	
+	rectfill(0,110,33,127,0)
+	rect(0,110,33,127,7)
+	
+	--[[
+	for x=0,31 do
+		for y=0,15 do
+			local m=mget(x*4,y*4)
+			local c=1
+			if m>=16 and m<32 then
+				c=4
+			elseif m>=32 and m<48 then
+				c=3
+			end
+			pset(1+x,111+y,c)
+		end
+	end
+	]]
+	
+	local mhx,mhy=world_to_map(heli.x,heli.y)
+	pset(mhx,mhy,12)
+	
+	for m in all(monsters) do
+		local mmx,mmy=world_to_map(m.x,m.y)
+		pset(mmx,mmy,14)
+	end
 
 	draw_watch()
+end
+
+function world_to_map(x,y)
+	local fx,fy=x/128,y/64
+	return fx*32+1,fy*16+111
 end
 
 function update_heli(h)
@@ -86,9 +123,15 @@ function update_heli(h)
 	
 	local ddx,ddy=0,0
 	
+	local boost=false
+	if (btn(5)) boost=true
+	
+	local accel=h.accel
+	if (boost) accel*=2
+	
 	if iy~=0 then
-		ddx=cos(h.rr)*h.accel*dt*iy
-		ddy=sin(h.rr)*h.accel*dt*iy
+		ddx=cos(h.rr)*accel*dt*iy
+		ddy=sin(h.rr)*accel*dt*iy
 	end
 
 	h.dx*=h.fric
@@ -98,12 +141,13 @@ function update_heli(h)
 	h.dy+=ddy
 	
 	local mx=h.mx_spd
-	if (btn(4)) mx*=4
+	if (boost) mx*=4
 	
 	local l=sqrt(h.dx*h.dx+h.dy*h.dy)
 	if l>mx then
-		h.dx=h.dx/l*mx
-		h.dy=h.dy/l*mx
+		local nmx=max(l-10*dt,mx)
+		h.dx=h.dx/l*nmx
+		h.dy=h.dy/l*nmx
 	end
 		
 	h.x+=h.dx*dt
@@ -231,17 +275,128 @@ end
 
 function add_monster(x,y)
 	return add(monsters,{
-		x=x,y=y
+		destroy=false,
+		x=x,y=y,rad=1.5,health=100,
+		dmg_time=0.06,t_dmg=0,
 	})
 end
 
 function update_monster(m)
+	if m.health<=0 then
+		m.destroy=true
+	end
+	
+	if (m.t_dmg>0) m.t_dmg-=dt
+	
+	local d=dist(m.x,m.y,heli.x,heli.y)
+	if d<16 and rnd()<0.02 then
+		local r=angle_to(m.x,m.y,heli.x,heli.y)
+		add_pulse(m.x,m.y,r,3)
+	end
+end
+
+function damage_monster(m,amt)
+	if m.health<=0 then
+		return
+	end
+	
+	m.t_dmg=m.dmg_time
+	m.health-=amt
 end
 
 function draw_monster(m)
 --	spr(64,m.x*8-cam.x,m.y*8-cam.y,2,2)
 		
-	sspr(0,32,16,16,m.x*8-cam.x,m.y*8-cam.y,32,32)
+	local mx,my=m.x*8-cam.x,
+		m.y*8-cam.y
+		
+	if m.t_dmg>0 then
+		for i=1,15 do
+			pal(i,8)
+		end
+	end
+		
+	sspr(0,32,16,16,mx-16,my-16,32,32)
+	
+	pal()
+--	pset(mx,my,11)
+--	circ(mx,my,m.rad*8,11)
+end
+
+function update_monsters()
+	foreach(monsters,update_monster)
+	
+	local n=#monsters
+	for i=1,n do
+		if monsters[i].destroy then
+			monsters[i]=nil
+		end
+	end
+	compress(monsters,n)
+end
+
+function draw_monsters()
+	foreach(monsters,draw_monster)
+end
+
+function find_bullet_hits()
+	local bn,mn=#bullets,#monsters
+	
+	for i=1,bn do
+		for j=1,mn do
+			local b=bullets[i]
+			local m=monsters[j]
+			if not b.destroy then
+				local d=dist(b.x,b.y,m.x,m.y)
+				if d<m.rad+1/8 then
+					b.destroy=true
+					damage_monster(m,12)
+				end
+			end
+		end
+	end
+end
+
+function add_pulse(x,y,r,life)
+	return add(pulses,{
+		destroy=false,
+		x=x,y=y,r=r,t_life=life
+	})
+end
+
+function update_pulse(p)
+	p.t_life-=dt
+	if p.t_life<=0 then
+		p.destroy=true
+	end
+	
+	local vx,vy=cos(p.r)*p.t_life*2,
+		sin(p.r)*p.t_life*2
+	
+	p.x+=vx*dt
+	p.y+=vy*dt
+end
+
+function draw_pulse(p)
+	local px,py=p.x*8-cam.x,
+		p.y*8-cam.y
+	spr(66,px-4,py-4)
+end
+
+function update_pulses()
+	foreach(pulses,update_pulse)
+
+	local n=#pulses
+	for i=1,n do
+		if pulses[i].destroy then
+			pulses[i]=nil
+		end
+	end
+	compress(pulses,n)
+end
+
+function draw_pulses()
+	foreach(pulses,draw_pulse)
 end
 -->8
 -- util
@@ -348,6 +503,19 @@ function draw_watch()
 		print(m,0,(i-1)*6,11)
 	end
 end
+
+function dist2(x1,y1,x2,y2)
+	local dx,dy=x2-x1,y2-y1
+	return dx*dx+dy*dy
+end
+
+function dist(x1,y1,x2,y2)
+	return sqrt(dist2(x1,y1,x2,y2))
+end
+
+function angle_to(ox,oy,tx,ty)
+	return atan2(tx-ox,ty-oy)
+end
 __gfx__
 00000000565656560000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000666666650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -381,14 +549,14 @@ __gfx__
 11ddd111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1111ddd1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 11111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00880000000088000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00e8800000088e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000e88888888e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00008828828800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00002ee88ee200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0088eee22eee88000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-8888ee2882ee88880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-ee882828828288ee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+008800000000880000deed0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00e8800000088e000deeeed000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000e88888888e000dedeeded00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000882882880000eeeeeeee00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00002ee88ee20000eeeeeeee00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0088eee22eee8800dedeeded00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+8888ee2882ee88880deeeed000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+ee882828828288ee00deed0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 88822282282228880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 ee28882ee28888ee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0022822ee22822000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
