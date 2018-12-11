@@ -47,7 +47,18 @@ function _init()
 	}
 	
 	cam={
-		x=0,y=0
+		-- position
+		posx=0,posy=0,
+		
+		-- shake
+		shkm=0,t_shk=0,
+		
+		-- shove
+		shvm=0,shva=0,shvv=0,
+		t_shv=0,shvt=0,
+		
+		-- final
+		x=0,y=0,
 	}
 	
 	bullets={}
@@ -105,9 +116,8 @@ function update()
 	mos.bt=stat(34)
 	
 	if mos.bt==1 and mos.pbt==0 then
-		local mx=flr((mos.x+cam.x)/8)
-		local my=flr((mos.y+cam.y)/8)
-		sel.x,sel.y=mx,my
+		local mx,my=s2w(mos.x,mos.y)
+		sel.x,sel.y=flr(mx),flr(my)
 	elseif mos.bt==2 and mos.pbt==0 then
 		sel.x,sel.y=-1,-1
 	end
@@ -126,8 +136,29 @@ function update()
 	
 	update_timers()
 	
-	cam.x=mid(0,heli.x*8-64,112*8)
-	cam.y=mid(0,heli.y*8-56,50*8+2)
+	cam.posx=mid(0,heli.x*8-64,112*8)
+	cam.posy=mid(0,heli.y*8-56,50*8+2)
+	
+	cam.x,cam.y=cam.posx,cam.posy
+	
+	if cam.t_shk>0 then
+		-- shake angle
+		local shka=rnd()
+		cam.x+=cos(shka)*cam.shkm
+		cam.y+=sin(shka)*cam.shkm
+		cam.t_shk-=dt
+	end
+	
+	if cam.t_shv>0 then
+		cam.x+=cos(cam.shva)*cam.shvm
+		cam.y+=sin(cam.shva)*cam.shvm
+		cam.t_shv-=dt
+		cam.shvm,cam.shvv=
+			damp(cam.shvm,0,cam.shvv,
+				cam.shvt)
+	end
+	
+	watch(cam.shvm)
 
 	watch("pos:"..heli.x..","..heli.y)	
 	watch("vel:"..heli.dx..","..heli.dy)
@@ -203,6 +234,18 @@ end
 function world_to_map(x,y)
 	local fx,fy=x/128,y/64
 	return fx*32+1,fy*16+111
+end
+
+function cam_shake(sec,mag)
+	cam.t_shk=sec
+	cam.shkm=mag
+end
+
+function cam_knock(ang,mag,sec)
+	cam.shvm=mag
+	cam.shva=ang
+	cam.t_shv=sec
+	cam.shvt=sec
 end
 
 function update_heli(h)
@@ -281,6 +324,7 @@ function update_heli(h)
 	
 	h.t_fire-=dt
 	if btn(4) and h.t_fire<=0 then
+		cam_knock(h.r+0.5,4,1)
 		add_bullet(h.x,h.y,h.rr,
 			{spd=25})
 		if h.ct_shot%8==0 then
@@ -293,7 +337,7 @@ function update_heli(h)
 end
 
 function draw_heli(h)
-	local cx,cy=h.x*8-cam.x,h.y*8-cam.y
+	local cx,cy=w2s(h.x,h.y)
 	
 	local r=h.rr
 	
@@ -370,8 +414,7 @@ function update_bullet(b)
 end
 
 function draw_bullet(b)
-	local cx,cy=b.x*8-cam.x,
-		b.y*8-cam.y
+	local cx,cy=w2s(b.x,b.y)
 		
 	local sz=3
 		
@@ -420,8 +463,7 @@ end
 function draw_monster(m)
 --	spr(64,m.x*8-cam.x,m.y*8-cam.y,2,2)
 		
-	local mx,my=m.x*8-cam.x,
-		m.y*8-cam.y
+	local mx,my=w2s(m.x,m.y)
 		
 	if m.t_dmg>0 then
 		for i=1,15 do
@@ -486,8 +528,7 @@ function update_pulse(p)
 end
 
 function draw_pulse(p)
-	local px,py=p.x*8-cam.x,
-		p.y*8-cam.y
+	local px,py=w2s(p.x,p.y)
 	spr(66,px-4,py-4)
 end
 
@@ -582,8 +623,7 @@ end
 
 function draw_rocket(ro)
 	local hl=ro.length/2
-	local cx,cy=ro.x*8-cam.x,
-		ro.y*8-cam.y
+	local cx,cy=w2s(ro.x,ro.y)
 	local fx,fy=cos(ro.r)*hl+cx,
 		sin(ro.r)*hl+cy
 	local bx,by=cos(ro.r)*-hl+cx,
@@ -597,7 +637,7 @@ k_tile_dirt=1
 k_tile_grass=2
 
 function gen_map(seed)
-	cls()
+	cls(1)
 	print("generating...",30,60,7)
 	flip()
 
@@ -631,6 +671,7 @@ function gen_map(seed)
 end
 
 function create_explosion(x,y,r,ivl,ct,colfn,szfn)
+	--sfx(8)
 	r=r or .5
 	ivl=ivl or 0.03
 	ct=ct or 5
@@ -645,6 +686,14 @@ function create_explosion(x,y,r,ivl,ct,colfn,szfn)
 			end,
 			i*ivl)
 	end
+end
+
+function w2s(wx,wy)
+	return wx*8-cam.x,wy*8-cam.y
+end
+
+function s2w(sx,sy)
+	return (sx+cam.x)/8,(sy+cam.y)/8
 end
 
 function smooth_land(mode)
@@ -934,7 +983,7 @@ function damp(a,b,vel,tm,mx,ts)
 	tm=max(.0001,tm or 0)
 	local omega=2/tm
 	
-	local x=omega*dt
+	local x=omega*ts
 	local exp=1/(1+x+.48*x*x+.235*x*x*x)
 	local c=b-a
 	local orig=b
@@ -1326,7 +1375,7 @@ __sfx__
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01040000053550a354073550735400355003540a35307354052000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
