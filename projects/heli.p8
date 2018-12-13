@@ -324,8 +324,9 @@ function update_heli(h)
 	
 	h.t_fire-=dt
 	if btn(4) and h.t_fire<=0 then
-		cam_knock(h.r+0.5,4,1)
-		add_bullet(h.x,h.y,h.rr,
+		--cam_knock(h.r+0.5,2,0.1)
+		cam_shake(0.1,1)
+		add_bullet(h.x,h.y,h.rr+rndr(-0.015,0.015),
 			{spd=25})
 		if h.ct_shot%8==0 then
 			add_rocket(h.x,h.y,h.rr-0.05)
@@ -608,7 +609,7 @@ function update_rocket(ro)
 			t.y-ro.y)
 --		ro.r=moveto_angle(ro.r,tr,0.5*dt)
 		ro.r,ro.dr=damp_angle(
-			ro.r,tr+.5,ro.dr,0.2,0.5)
+			ro.r,tr,ro.dr,0.2,0.2)
 	end
 	
 	ro.spd+=ro.accel*dt
@@ -989,11 +990,11 @@ function damp(a,b,vel,tm,mx,ts)
 	local orig=b
 	
 	local mxc=mx*tm
-	c=clamp(c,-mxc,mxc)
+	c=mid(c,-mxc,mxc)
 	b=a-c
 	
 	local tmp=(vel+omega*c)*ts
-	vel=(vel-omega*tmp)*exp
+	vel=(vel+omega*tmp)*exp
 	local ret=b+(c+tmp)*exp
 	
 	if (orig-a>0)==(ret>orig) then
@@ -1084,6 +1085,10 @@ end
 
 function direction(angle)
 	return cos(angle),sin(angle)
+end
+
+function rndr(mn,mx)
+	return rnd()*(mx-mn)+mn
 end
 -->8
 function init_particles()
