@@ -6,7 +6,7 @@ __lua__
 
 function _init()
 	ents={}
-	for i=0,100 do
+	for i=0,600 do
 		entity({
 			-- position
 			pos={x=rnd(128),y=rnd(128)},
@@ -65,6 +65,8 @@ end
 function _draw()
 	cls()
 	drawents(ents)
+	print("mem:"..stat(0),0,0,6)
+	print("cpu:"..(stat(1)*100).."%",0,6,6)
 end
 
 function _has(e, ks)
