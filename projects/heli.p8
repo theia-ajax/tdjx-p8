@@ -1,11 +1,12 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
-
+-- heli
+-- tdjx
 
 function _init()
 	poke(0x5f2d,1)
-	
+
 	dbg={
 		fbf=false,
 		adv=false,
@@ -29,7 +30,7 @@ function _init()
 		bst_acl_scl=2,
 		bst_mxspd_scl=1.5,
 		fric_drag_scl=75,
-		t0=0,
+		t0=0,dt0=0,
 		t_fire=0,
 		ct_shot=0,
 		fire_rate=0.17,
@@ -67,6 +68,10 @@ function _init()
 	rockets={}
 	monsters={}
 	pulses={}
+	
+	game={
+		level=1,
+	}
 	
 	init_particles()
 	init_timers()
@@ -126,14 +131,8 @@ function update()
 	
 	update_watch()
 
-	spr_rectfill(2,0,0,7,7,1)
-	for x=0,7 do
-		for yy=0,1 do
-			local y=sin(x/8+yy/12+t()/4)*0.5+4*yy-t()
-			y=flr(y)%8
-			spr_pset(2,x,y,13)
-		end
-	end
+	update_ocean()
+	
 	
 
 	update_heli(heli)
@@ -141,6 +140,8 @@ function update()
 	update_elements(rockets,update_rocket)
 	update_elements(monsters,update_monster)
 	update_elements(pulses,update_pulse)
+	
+--	update_director()
 
 	find_bullet_hits()
 
@@ -174,8 +175,8 @@ function update()
 	end
 	if btnp(5) then
 		local r=rnd()
-		cam.offx=cos(r)*256
-		cam.offy=sin(r)*256
+		cam.offx=cos(r)*64
+		cam.offy=sin(r)*64
 	end
 	
 	cam.offx+=cam.ofdx
@@ -183,8 +184,8 @@ function update()
 	
 	cam.ofdx+=-cam.offx*0.98*dt
 	cam.ofdy+=-cam.offy*1.4*dt
-	if (sgn(cam.ofdx)==sgn(cam.offx)) cam.ofdx*=.5
-	if (sgn(cam.ofdy)==sgn(cam.offy)) cam.ofdy*=.5
+	if (_sgn(cam.ofdx)==_sgn(cam.offx)) cam.ofdx*=.5
+	if (_sgn(cam.ofdy)==_sgn(cam.offy)) cam.ofdy*=.5
 
 	if abs(cam.offx)<0.5 and abs(cam.ofdx)<0.1 then
 		cam.ofdx=0
@@ -215,7 +216,7 @@ end
 
 function _draw()
 	cls()
-	
+
 	if cam.ofdx~=0 or cam.ofdy~=0 then
 		for i=0,15 do
 			pal(i,12+((i+t()*i)%4))
@@ -225,6 +226,8 @@ function _draw()
 	end
 
 	map(0,0,-cam.x,-cam.y,128,64)
+	
+	pal()
 	
 	if sel.x>=0 and sel.y>=0 then
 		local sx,sy=sel.x*8-cam.x,
@@ -239,6 +242,14 @@ function _draw()
 	foreach(pulses,draw_pulse)
 	draw_particles()
 	
+	if cam.ofdx~=0 or cam.ofdy~=0 then
+		for i=0,15 do
+			pal(i,12+((i+t()*i)%4))
+		end
+	else
+		pal()
+	end
+	
 	-- hud start
 	
 	-- map bg
@@ -252,7 +263,7 @@ function _draw()
 			local c=0
 			if is_dirt(xx,yy) then
 				c=3
-			elseif is_town(xx,yy) then
+			elseif is_city(xx,yy) then
 				c=6
 			elseif is_rubble(xx,yy) then
 				c=5
@@ -262,7 +273,7 @@ function _draw()
 	end
 	
 	-- draw map heli
-	if blink(1/2) then
+	if blink(1/3) then
 		local mhx,mhy=world_to_map(heli.x,heli.y)
 		local rr=flr(wrap(heli.r+1/16,1)*8)+1
 		local offtbl={
@@ -278,7 +289,7 @@ function _draw()
 
 	for m in all(monsters) do
 		local mmx,mmy=world_to_map(m.x,m.y)
-		map_pset(mmx,mmy,14)
+		map_pset(mmx,mmy,8)
 	end
 	
 	-- hud panel
@@ -371,7 +382,10 @@ function cam_knock(ang,mag,sec)
 end
 
 function update_heli(h)
-	h.t0+=dt*4
+	h.dt0=mid(h.dt0+1*dt,0,4)
+
+
+	h.t0+=dt*h.dt0
 	if (h.t0>1) h.t0-=1
 	
 	local ix,iy=0,0
@@ -489,7 +503,7 @@ function draw_mesh(x,y,r,mesh,bgcol,linecol)
 end
 
 function draw_heli(h)
-	draw_mesh(h.x,h.y,h.rr,h,11,0)
+	draw_mesh(h.x,h.y,h.rr,h,12,0)
 	
 	local cx,cy=w2s(h.x,h.y)
 	local rad=6
@@ -521,9 +535,9 @@ function px_fill(x,y,c,bg)
 end
 
 function add_bullet(x,y,r,props)
-	local p=props or {}
-	local spd=p.spd or 10
-	local t_life=p.lifetime or 1
+	p=props or {}
+	spd=p.spd or 10
+	t_life=p.lifetime or 1
 	return add(bullets,{
 		destroy=false,
 		x=x or 0,y=y or 0,
@@ -533,7 +547,6 @@ function add_bullet(x,y,r,props)
 			create_explosion(b.x,b.y,
 				0.25,0.03,3,function() return 10 end,
 				function() return 3 end)
-
 		end,
 	})
 end
@@ -609,40 +622,40 @@ function update_monster(m)
 	m.x+=m.dx*dt
 	m.y+=m.dy*dt
 	
-	if dist(heli.x,heli.y,m.x,m.y)<16 then
+	local d2=dist2(heli.x,heli.y,
+		m.x,m.y)
 	
-	m.tf_part-=1
-	if m.tf_part<=0 then
-		local l=mid(sqrt(m.dx*m.dx+m.dy*m.dy)/5,0,1)
-		m.tf_part=lerp(10,m.part_ivlf,l)
-		local a=rnd()*0.3+0.6
-		local px=m.x+cos(a)*4
-		local py=m.y+sin(a)*3.5
-		local col=7
-		if (is_dirt(px,py)) col=15
-		if (is_town(px,py) or is_rubble(px,py)) col=6
-		add_particle(px,py,{
- 		lifetime=0.5,
- 		col=col,
- 		style="fill",
- 		ax=0,ay=15,
- 		size=1+rnd(2),
- 		dx=(rnd()-0.5)*4,dy=-3
- 		-rnd(2),
- 	})
-	end
+	if d2<256	then
+ 	m.tf_part-=1
+ 	if m.tf_part<=0 then
+ 		local l=mid(sqrt(m.dx*m.dx+m.dy*m.dy)/5,0,1)
+ 		m.tf_part=lerp(10,m.part_ivlf,l)
+ 		local a=rnd()*0.3+0.6
+ 		local px=m.x+cos(a)*3
+ 		local py=m.y+sin(a)*3
+ 		local col=7
+ 		if (is_dirt(px,py)) col=15
+ 		if (is_city(px,py) or is_rubble(px,py)) col=6
+ 		add_particle(px,py,{
+  		lifetime=0.5,
+  		col=col,
+  		style="fill",
+  		ax=0,ay=15,
+ 			size=1+rnd(2),
+  		dx=(rnd()-0.5)*4,dy=-3
+  		-rnd(2),
+  	})
+ 	end
 	end
 	
-	local lx=mid(flr(m.x)-2,0,127)
+	local lx=mid(flr(m.x)-1,0,127)
 	local hx=mid(flr(m.x)+2,0,127)
-	local ly=mid(flr(m.y)-2,0,127)
+	local ly=mid(flr(m.y)-1,0,127)
 	local hy=mid(flr(m.y)+2,0,127)
 	
 	for x=lx,hx do
 		for y=ly,hy do
-			if mget(x,y)>=3 and mget(x,y)<=6 then
-				mset(x,y,7+flr(rnd(4)))
-			end
+			destroy_city(x,y)
 		end
 	end
 	
@@ -663,6 +676,12 @@ function update_monster(m)
 	end
 end
 
+function destroy_city(x,y)
+	if is_city(x,y) then
+		mset(x,y,7+flr(rnd(4)))
+	end
+end
+
 function damage_monster(m,amt)
 	if m.health<=0 then
 		return
@@ -670,7 +689,7 @@ function damage_monster(m,amt)
 
 	if (m.t_dmg<=0) sfx(3)
 	m.t_dmg=m.dmg_time
-	m.health-=amt*0
+	m.health-=amt
 	
 end
 
@@ -678,6 +697,8 @@ function draw_monster(m)
 --	spr(64,m.x*8-cam.x,m.y*8-cam.y,2,2)
 		
 	local mx,my=w2s(m.x,m.y)
+		
+--	fillellipse(mx,my+12,20,12,0)
 		
 	if m.t_dmg>0 then
 		pal(8,15)
@@ -748,11 +769,15 @@ end
 function add_pulse(x,y,r,life)
 	return add(pulses,{
 		destroy=false,
-		x=x,y=y,r=r,t_life=life
+		x=x,y=y,r=r,t_life=life,
+		t0=0,tf0=0
 	})
 end
 
 function update_pulse(p)
+	p.t0+=dt
+	p.tf0+=1
+
 	p.t_life-=dt
 	if p.t_life<=0 then
 		p.destroy=true
@@ -767,7 +792,9 @@ end
 
 function draw_pulse(p)
 	local px,py=w2s(p.x,p.y)
-	spr(66,px-4,py-4)
+	--cols={2,14,7,14}
+	--circfill(px,py,3+(flr(p.tf0/8)%2),cols[flr(p.t0*8)%4+1])
+	spr(82+flr(p.t0*20)%5,px-3,py-3)
 end
 
 function add_rocket(x,y,r,props)
@@ -870,86 +897,6 @@ function draw_rocket(ro)
 	circ(bx,by,1,12)
 end
 
-k_tile_water=0
-k_tile_dirt=1
-k_tile_grass=2
-
-function gen_map(seed)
-	cls(1)
-	print("generating...",30,60,7)
-	flip()
-
-	if true then
-	if (seed) srand(seed)
-	
-	for x=0,127 do
-		for y=0,63 do
-			mset(x,y,2)
-		end
-	end
-	
-	local island_ct=48
-	for i=1,island_ct do
---		map_rect(flr(rnd(128)),flr(rnd(64)),
---			flr(rnd(12))+1,flr(rnd(10))+1,
---			16)
-		map_circ(flr(rnd(128)),flr(rnd(64)),
-			flr(rnd(6))+2,16)
-	end
-	
-	for i=0,island_ct*2 do
-		map_rect(flr(rnd(128)),flr(rnd(128)),
-		 flr(rnd(2)),flr(rnd(20))+1,16)
-		map_rect(flr(rnd(128)),flr(rnd(128)),
-			flr(rnd(20))+1,flr(rnd(2)),16)
-	end
-	end
-	
-	smooth_land(smooth_mode)
-
-	for i=0,50 do
-		local x,y=0,0
-		while mget(x,y)~=16 do
-			x=flr(rnd(128))
-			y=flr(rnd(64))
-		end
-		
-		for j=0,200 do
-			if mget(x,y)==16 then
-				mset(x,y,3+flr(rnd(4)))
-			end
-			local d=flr(rnd(5))
-			if d==1 then
-				x+=1
-			elseif d==2 then
-				x-=1
-			elseif d==3 then
-				y+=1
-			elseif d==4 then
-				y-=1
-			end
-		end
-	end
-end
-
-function create_explosion(x,y,r,ivl,ct,colfn,szfn)
-	--sfx(8)
-	r=r or .5
-	ivl=ivl or 0.03
-	ct=ct or 5
-	colfn=colfn or function() return 8 end
-	szfn=szfn or function() return 4+rnd(2) end
-	for i=0,ct-1 do
-		defer(function()
-			local a=rnd()
-			add_particle(x+cos(a)*r,
-				y+sin(a)*r,
-				{size=szfn(),f_size=0,col=colfn(),fade=true,lifetime=0.25+rnd()*.5})
-			end,
-			i*ivl)
-	end
-end
-
 function w2s(wx,wy)
 	return wx*8-cam.x,wy*8-cam.y
 end
@@ -958,153 +905,16 @@ function s2w(sx,sy)
 	return (sx+cam.x)/8,(sy+cam.y)/8
 end
 
-function smooth_land(mode)
-	mode=mode or 8
-	for y=0,63 do
-		for x=0,127 do
-			if is_dirt(x,y) then
-				smooth_dirt_tile(x,y,mode)
-			end
+function update_ocean()
+	spr_rectfill(2,0,0,7,7,1)
+	for x=0,7 do
+		for yy=0,1 do
+			local y=sin(x/8+yy/16+t()/4)*1+4*yy-t()/4
+			y=flr(y)%8
+			spr_pset(2,x,y,13)
 		end
 	end
 end
-
-function smooth_dirt_tile(x,y,mode)
-	local m=calc_dirt_mask(x,y,mode)
-	local d=get_dirt_tile(m,mode)
-	mset(x,y,d)
-end
-
-function map_rect(x,y,w,h,v)
-	for xx=x,min(x+w,127) do
-		for yy=y,min(y+h,63) do
-			mset(xx,yy,v)
-		end
-	end
-end
-
-function map_circ(x,y,r,v)
-	for xx=max(x-r,0),min(x+r,127) do
-		for yy=max(y-r,0),min(y+r,63) do
-			local dx,dy=xx-x,yy-y
-			if sqrt(dx*dx+dy*dy)<=r then
-				mset(xx,yy,v)
-			end
-		end
-	end
-end
-
-function get_dirt_tile(idx,m)
-	if m==4 then
-		return _dirt_table_4[idx+1]
-	elseif m==8 then
-		return _dirt_table[idx+1]
-	end
-end
-
-function calc_dirt_mask(x,y,m)
-	if m==4 then
-		return calc_dirt_mask4(x,y)
-	elseif m==8 then
-		return calc_dirt_mask8(x,y)
-	end
-end
-
-function calc_dirt_mask8(x,y)
-	local ret=0
-	if (is_dirt(x-1,y-1)) ret+=1
-	if (is_dirt(x,y-1)) ret+=2
-	if (is_dirt(x+1,y-1)) ret+=4
-	if (is_dirt(x-1,y)) ret+=8
-	if (is_dirt(x+1,y)) ret+=16
-	if (is_dirt(x-1,y+1)) ret+=32
-	if (is_dirt(x,y+1)) ret+=64
-	if (is_dirt(x+1,y+1)) ret+=128
-	return ret
-end
-
-function calc_dirt_mask4(x,y)
-	local ret=0
-	if (is_dirt(x,y-1)) ret+=1
-	if (is_dirt(x-1,y)) ret+=2
-	if (is_dirt(x+1,y)) ret+=4
-	if (is_dirt(x,y+1)) ret+=8
-	return ret
-end
-
-function is_dirt(x,y)
-	local m=mget(x,y)
-	return m>=16 and m<=48
-end
-
-function is_town(x,y)
-	local m=mget(x,y)
-	return m>=3 and m<=6
-end
-
-function is_rubble(x,y)
-	local m=mget(x,y)
-	return m>=7 and m<=10
-end
-
-_dirt_table={
-	-- 0-31
- 37,37,30,30,37,37,30,30, --0
- 32,32,24,24,32,32,24,24, --8
- 31,31,23,23,31,31,23,23, --16
- 38,38,40,19,38,38,19,19, --24
-
-	-- 32-63
- 37,37,30,30,37,37,30,30,	--32
- 32,32,24,24,32,32,24,24,	--40
- 31,31,23,23,31,31,23,23,	--48
- 38,38,40,19,38,38,19,19,	--56
-
-	-- 64-95
- 29,29,39,39,29,29,39,39,	--64
- 21,21,41,20,21,21,41,20,	--72
- 22,22,43,43,22,22,18,18,	--80
- 42,42,44,47,42,42,45,35,	--88
-
-	-- 96-127
- 29,29,39,39,29,29,39,39,	--96
- 21,21,20,20,21,21,20,20,	--104
- 22,22,43,43,22,22,18,18,	--112
- 17,17,48,36,17,17,16,16,	--120
-
-	-- 128-159
- 37,37,30,30,37,37,30,30,	--128
- 32,32,24,24,32,32,24,24,	--136
- 31,31,23,23,31,31,23,23,	--144
- 38,38,40,19,38,38,19,19,	--152
-
-	-- 160-191
- 37,37,30,30,37,37,30,30,	--160
- 32,32,24,24,32,32,24,24,	--168
- 31,31,23,23,31,31,23,23,	--176
- 38,38,40,19,38,38,19,19,	--184
-
-	-- 192-223
- 29,29,39,39,29,29,39,39,	--192
- 21,21,41,20,21,21,41,20,	--200
- 22,22,18,18,22,22,18,18,	--208
- 17,17,45,16,17,17,34,27,	--216
-
-	-- 224-255
- 29,29,39,39,29,29,39,39,	--224
- 21,21,20,20,21,21,20,20,	--232
-	22,22,18,18,22,22,18,18, --240
- 17,17,33,25,17,17,26,16, --248
-}
-
-_dirt_table_4={
-	37,30,32,24,
-	31,23,38,19,
-	29,39,21,20,
-	22,18,17,16,
-}
-
-
 -->8
 -- util
 
@@ -1150,49 +960,6 @@ function compress(a,n)
 	end
 end
 
-function print_array(a,n)
-	local n=n or #a
-	local str=""
-	for i=1,n do
-		str=str..tostr(a[i])
-		if (i<n) str=str..","
-	end
-	print(str)
-end
-
-function clone_array(a,n)
-	local r={}
-	local n=n or #a
-	for i=1,n do
-		r[i]=a[i]
-	end
-	return r
-end
-
-function test_compress()
-	local a={1,2,3,4,5,6,7,8}
-	local b=clone_array(a)
-	b[2]=nil
-	b[5]=nil
-	print_array(a)
-	compress(b)
-	print_array(b)
-	
-	local c=clone_array(a)
-	c[0]=nil
-	c[8]=nil
-	c[6]=nil
-	print_array(a)
-	compress(c,8)
-	print_array(c)
-end
-
---[[
-cls()
-test_compress()
-flip()
-]]
-
 __watch={}
 
 function watch(m)
@@ -1208,6 +975,15 @@ function draw_watch()
 	for i=1,n do
 		local m=__watch[i]
 		print(m,0,(i-1)*6,11)
+	end
+end
+
+function mod(a,b)
+	local r=a%b
+	if r>=0 then
+		return r
+	else
+		return r+b
 	end
 end
 
@@ -1362,6 +1138,41 @@ function blink(ivl,tt)
 	return tt%(ivl*2)<ivl
 end
 
+function fillellipse(x,y,rx,ry,c)
+	local t,b=y-ry,y+ry
+	for l=t,b do
+		local lx=sin(1-((l-t)/(ry*4)))*rx
+		if lx>1 then
+			line(ceil(x-lx),l,flr(x+lx),l,c)
+		end
+	end
+end
+	
+-- timers
+
+function init_timers()
+	timers={}
+end
+
+function defer(fn,sec,params)
+	add(timers,{
+		fn=fn or function() end,
+		t0=sec or 0,
+		params=params,
+	})
+end
+
+function update_timers()
+	update_elements(timers,
+		function(tm)
+			tm.t0-=dt 
+			if tm.t0<=0 then
+				tm.destroy=true,
+				tm.fn(tm.params)
+			end
+		end)
+end
+
 -->8
 -- particles
 
@@ -1437,6 +1248,25 @@ function draw_particle(p)
 		end
 	end
 end
+
+
+function create_explosion(x,y,r,ivl,ct,colfn,szfn)
+	--sfx(8)
+	r=r or .5
+	ivl=ivl or 0.03
+	ct=ct or 5
+	colfn=colfn or function() return 8 end
+	szfn=szfn or function() return 4+rnd(2) end
+	for i=0,ct-1 do
+		defer(function()
+			local a=rnd()
+			add_particle(x+cos(a)*r,
+				y+sin(a)*r,
+				{size=szfn(),f_size=0,col=colfn(),fade=true,lifetime=0.25+rnd()*.5})
+			end,
+			i*ivl)
+	end
+end
 -->8
 -- fade
 
@@ -1473,30 +1303,60 @@ function fade_scr(ft)
 	end
 end
 -->8
--- timers
+-- screen effects
 
-function init_timers()
-	timers={}
+function offset_scr(ox,oy,hlock)
+	ox=ox or 0
+	oy=oy or 0
+	hlock=hlock or false
+	
+	if ox~=0 then
+		ox=flr(mod(ox,128))
+		hx=flr(ox/2)
+ 	for y=0,127 do
+ 		--scanline address
+ 		local sla=0x6000+y*64
+ 		local ihx=64-hx
+ 	
+ 		if ox<64 then
+ 			memcpy(0x4300,sla+ihx,hx)
+ 			memcpy(sla+hx,sla,ihx)
+ 			memcpy(sla,0x4300,hx)
+ 		else
+ 			memcpy(0x4300,sla,ihx)
+ 			memcpy(sla,sla+ihx,hx)
+ 			memcpy(sla+hx,0x4300,ihx)
+ 		end
+ 
+ 		if not hlock and ox%2==1 then
+ 			local tmp=peek(sla+63)
+ 			for x=0,63 do
+ 				local addr=sla+x
+ 				local c=peek(addr)
+ 				local ch=shl(band(c,0xf),4)
+ 				local cl=shr(band(tmp,0xf0),4)
+ 				tmp=c
+ 				poke(addr,bor(ch,cl))
+ 			end
+ 		end
+ 	end
+ end
+	
+	if oy~=0 then
+		oy=flr(mod(oy,128))
+		local h,t=oy*64,(128-oy)*64
+ 	if oy<64 then
+ 		memcpy(0x4300,0x6000+t,h)
+ 		memcpy(0x6000+h,0x6000,t)
+ 		memcpy(0x6000,0x4300,h)
+ 	else
+ 		memcpy(0x4300,0x6000,t)
+ 		memcpy(0x6000,0x6000+t,h)
+ 		memcpy(0x6000+h,0x4300,t)
+ 	end
+ end
 end
 
-function defer(fn,sec,params)
-	add(timers,{
-		fn=fn or function() end,
-		t0=sec or 0,
-		params=params,
-	})
-end
-
-function update_timers()
-	update_elements(timers,
-		function(tm)
-			tm.t0-=dt 
-			if tm.t0<=0 then
-				tm.destroy=true,
-				tm.fn(tm.params)
-			end
-		end)
-end
 
 -->8
 -- spr functions
@@ -1587,156 +1447,235 @@ function px_addr(sp,lx,ly)
 	return row*64+col
 end
 -->8
--- perlin
+-- mapgen
 
-function shuffle(a)
-	local n=#a
-	for i=1,n-1 do
-		local j=flr(rnd(n-i))+i
-		a[i],a[j]=a[j],a[i]
-	end
-end
+function gen_map(seed)
+	cls(1)
+	print("generating...",30,60,7)
+	flip()
 
-_noise={}
-for i=1,256 do
-	_noise[i]=i
-end
-shuffle(_noise)
-
-
-function perlin(x,y,z)
-	z=z or 0
+	if true then
+	if (seed) srand(seed)
 	
-	local ix=band(flr(x),255)
-	local iy=band(flr(y),255)
-	local iz=band(flr(z),255)
-	
-	x-=flr(x)
-	y-=flr(y)
-	z-=flr(z)
-	
-	local u,v,w=fade(x),fade(y),fade(z)
-	
-	local a=_noise[ix+1]+iy
-	local aa=_noise[a+1]+iz
-	local ab=_noise[a+2]+iz
-	local b=_noise[ix+2]+iy
-	local ba=_noise[b+1]+iz
-	local bb=_noise[b+2]+iz
-	
-	local l1=lerp(
-				grad(_noise[aa+1],x,y,z),
-				grad(_noise[ba+1],x-1,y,z),
-				u)
-	
-	local l2=lerp(
-				grad(_noise[ab+1],x,y-1,z),
-				grad(_noise[bb+1],x-1,y-1,z),
-				u)
-				
-	local l3=lerp(
-				grad(_noise[aa+2],x,y,z-1),
-				grad(_noise[ba+2],x-1,y,z-1),
-				u)
-				
-	local l4=lerp(
-				grad(_noise[ab+2],x,y-1,z-1),
-				grad(_noise[bb+2],x-1,y-1,z-1),
-				u)
-	
-	local ret=lerp(lerp(l1,l2,v),lerp(l3,l4,v),w)
-		
-	return (ret+1)/2
-end
-
-function fade(a)
-	return a*a*a*(a*(a*6-15)+10)
-end
-
-function grad(hash,x,y,z)
-	local h=band(hash,15)
-	local u=x
-	if (h<8) u=y
-	local v=y
-	if h>=4 then
-		if h==12 or h==14 then
-			v=x
-		else
-			v=z
+	for x=0,127 do
+		for y=0,63 do
+			mset(x,y,2)
 		end
 	end
-	if (band(h,1)~=0) u=-u
-	if (band(h,2)~=0) v=-v
-	return u+v
-end
+	
+	local island_ct=48
+	for i=1,island_ct do
+--		map_rect(flr(rnd(128)),flr(rnd(64)),
+--			flr(rnd(12))+1,flr(rnd(10))+1,
+--			16)
+		map_circ(flr(rnd(128)),flr(rnd(64)),
+			flr(rnd(6))+2,16)
+	end
+	
+	for i=0,island_ct*2 do
+		map_rect(flr(rnd(128)),flr(rnd(128)),
+		 flr(rnd(2)),flr(rnd(20))+1,16)
+		map_rect(flr(rnd(128)),flr(rnd(128)),
+			flr(rnd(20))+1,flr(rnd(2)),16)
+	end
+	end
+	
+	smooth_land(smooth_mode)
 
-function lerp(a,b,t)
-	return a+(b-a)*t
-end
--->8
--- screen offset
-
-function mod(a,b)
-	local r=a%b
-	if r>=0 then
-		return r
-	else
-		return r+b
+	for i=0,50 do
+		local x,y=0,0
+		while mget(x,y)~=16 do
+			x=flr(rnd(128))
+			y=flr(rnd(64))
+		end
+		
+		for j=0,200 do
+			if mget(x,y)==16 then
+				mset(x,y,3+flr(rnd(4)))
+			end
+			local d=flr(rnd(5))
+			if d==1 then
+				x+=1
+			elseif d==2 then
+				x-=1
+			elseif d==3 then
+				y+=1
+			elseif d==4 then
+				y-=1
+			end
+		end
 	end
 end
 
-function offset_scr(ox,oy)
-	ox=ox or 0
-	oy=oy or 0
-	
-	if ox~=0 then
-		ox=flr(mod(ox,128))
-		hx=flr(ox/2)
- 	for y=0,127 do
- 		--scanline address
- 		local sla=0x6000+y*64
- 		local ihx=64-hx
- 	
- 		if ox<64 then
- 			memcpy(0x4300,sla+ihx,hx)
- 			memcpy(sla+hx,sla,ihx)
- 			memcpy(sla,0x4300,hx)
- 		else
- 			memcpy(0x4300,sla,ihx)
- 			memcpy(sla,sla+ihx,hx)
- 			memcpy(sla+hx,0x4300,ihx)
- 		end
- 
- 		if ox%2==1 then
- 			local tmp=peek(sla+63)
- 			for x=0,63 do
- 				local addr=sla+x
- 				local c=peek(addr)
- 				local ch=shl(band(c,0xf),4)
- 				local cl=shr(band(tmp,0xf0),4)
- 				tmp=c
- 				poke(addr,bor(ch,cl))
- 			end
- 		end
- 	end
- end
-	
-	if oy~=0 then
-		oy=flr(mod(oy,128))
-		local h,t=oy*64,(128-oy)*64
- 	if oy<64 then
- 		memcpy(0x4300,0x6000+t,h)
- 		memcpy(0x6000+h,0x6000,t)
- 		memcpy(0x6000,0x4300,h)
- 	else
- 		memcpy(0x4300,0x6000,t)
- 		memcpy(0x6000,0x6000+t,h)
- 		memcpy(0x6000+h,0x4300,t)
- 	end
- end
+function smooth_land(mode)
+	mode=mode or 8
+	for y=0,63 do
+		for x=0,127 do
+			if is_dirt(x,y) then
+				smooth_dirt_tile(x,y,mode)
+			end
+		end
+	end
 end
 
+function smooth_dirt_tile(x,y,mode)
+	local m=calc_dirt_mask(x,y,mode)
+	local d=get_dirt_tile(m,mode)
+	mset(x,y,d)
+end
 
+function map_rect(x,y,w,h,v)
+	for xx=x,min(x+w,127) do
+		for yy=y,min(y+h,63) do
+			mset(xx,yy,v)
+		end
+	end
+end
+
+function map_circ(x,y,r,v)
+	for xx=max(x-r,0),min(x+r,127) do
+		for yy=max(y-r,0),min(y+r,63) do
+			local dx,dy=xx-x,yy-y
+			if sqrt(dx*dx+dy*dy)<=r then
+				mset(xx,yy,v)
+			end
+		end
+	end
+end
+
+function get_dirt_tile(idx,m)
+	if m==4 then
+		return _dirt_table_4[idx+1]
+	elseif m==8 then
+		return _dirt_table[idx+1]
+	end
+end
+
+function calc_dirt_mask(x,y,m)
+	if m==4 then
+		return calc_dirt_mask4(x,y)
+	elseif m==8 then
+		return calc_dirt_mask8(x,y)
+	end
+end
+
+function calc_dirt_mask8(x,y)
+	local ret=0
+	if (is_dirt(x-1,y-1)) ret+=1
+	if (is_dirt(x,y-1)) ret+=2
+	if (is_dirt(x+1,y-1)) ret+=4
+	if (is_dirt(x-1,y)) ret+=8
+	if (is_dirt(x+1,y)) ret+=16
+	if (is_dirt(x-1,y+1)) ret+=32
+	if (is_dirt(x,y+1)) ret+=64
+	if (is_dirt(x+1,y+1)) ret+=128
+	return ret
+end
+
+function calc_dirt_mask4(x,y)
+	local ret=0
+	if (is_dirt(x,y-1)) ret+=1
+	if (is_dirt(x-1,y)) ret+=2
+	if (is_dirt(x+1,y)) ret+=4
+	if (is_dirt(x,y+1)) ret+=8
+	return ret
+end
+
+function is_dirt(x,y)
+	local m=mget(x,y)
+	return m>=16 and m<=48
+end
+
+function is_city(x,y)
+	local m=mget(x,y)
+	return m>=3 and m<=6
+end
+
+function is_rubble(x,y)
+	local m=mget(x,y)
+	return m>=7 and m<=10
+end
+
+_dirt_table={
+	-- 0-31
+ 37,37,30,30,37,37,30,30, --0
+ 32,32,24,24,32,32,24,24, --8
+ 31,31,23,23,31,31,23,23, --16
+ 38,38,40,19,38,38,19,19, --24
+
+	-- 32-63
+ 37,37,30,30,37,37,30,30,	--32
+ 32,32,24,24,32,32,24,24,	--40
+ 31,31,23,23,31,31,23,23,	--48
+ 38,38,40,19,38,38,19,19,	--56
+
+	-- 64-95
+ 29,29,39,39,29,29,39,39,	--64
+ 21,21,41,20,21,21,41,20,	--72
+ 22,22,43,43,22,22,18,18,	--80
+ 42,42,44,47,42,42,45,35,	--88
+
+	-- 96-127
+ 29,29,39,39,29,29,39,39,	--96
+ 21,21,20,20,21,21,20,20,	--104
+ 22,22,43,43,22,22,18,18,	--112
+ 17,17,48,36,17,17,16,16,	--120
+
+	-- 128-159
+ 37,37,30,30,37,37,30,30,	--128
+ 32,32,24,24,32,32,24,24,	--136
+ 31,31,23,23,31,31,23,23,	--144
+ 38,38,40,19,38,38,19,19,	--152
+
+	-- 160-191
+ 37,37,30,30,37,37,30,30,	--160
+ 32,32,24,24,32,32,24,24,	--168
+ 31,31,23,23,31,31,23,23,	--176
+ 38,38,40,19,38,38,19,19,	--184
+
+	-- 192-223
+ 29,29,39,39,29,29,39,39,	--192
+ 21,21,41,20,21,21,41,20,	--200
+ 22,22,18,18,22,22,18,18,	--208
+ 17,17,45,16,17,17,34,27,	--216
+
+	-- 224-255
+ 29,29,39,39,29,29,39,39,	--224
+ 21,21,20,20,21,21,20,20,	--232
+	22,22,18,18,22,22,18,18, --240
+ 17,17,33,25,17,17,26,16, --248
+}
+
+_dirt_table_4={
+	37,30,32,24,
+	31,23,38,19,
+	29,39,21,20,
+	22,18,17,16,
+}
+
+
+-->8
+-- todo
+
+-- monsters:
+--		spawning
+--		targeting cities
+--		targeting player
+--		some more attacks
+--		maybe different kinds?
+
+-- helicopter:
+--		shooting progression
+--		powerups?
+
+-- game loop:
+--		generate region
+--		save some % of city
+--			against n waves of monsters
+--		success: next region
+--		failure: game over,
+--			scoring,
+--			high scores?
 __gfx__
 0000000056565656111111113637533377a533352d33d65d66333351353353353353355335535333355335330000000000000000000000000000000000000000
 00000000666666651dddd1115557566a757577751133225156161651355555535555555555555556555555550000000000000000000000000000000000000000
@@ -1778,13 +1717,13 @@ ff3333ff000000000000000000000000000000000000000000000000000000000000000000000000
 0022eee88eee2200dedeeded00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2222ee8228ee22220deeeed000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 ee228282282822ee00deed0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-22288828828882220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-ee82228ee82222ee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0088288ee88288000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-02e0828ee8280e200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-2e008828828800e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0002e08ee80e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-022e00e00e00e2200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+22288828828882220000000000000000007770000077700000000000000000000000000000000000000000000000000000000000000000000000000000000000
+ee82228ee82222ee0000000000eee000077777000777770000eee000000000000000000000000000000000000000000000000000000000000000000000000000
+0088288ee8828800002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
+02e0828ee8280e20002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
+2e008828828800e2002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
+0002e08ee80e20000000000000eee000077777000777770000eee000000000000000000000000000000000000000000000000000000000000000000000000000
+022e00e00e00e2200000000000000000007770000077700000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2e000e8008e000e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
