@@ -33,7 +33,13 @@ function _init()
 		t0=0,dt0=0,
 		t_fire=0,
 		ct_shot=0,
-		fire_rate=0.17,
+		fire_rate=0.11,
+		armor=1,
+		heat=0,
+		heat_gain=0.06,
+		heat_decay=0.33,
+		heat_locktime=4,
+		heat_lt0=0,
 		vts={
 			4,0,
 			3,2,
@@ -68,21 +74,31 @@ function _init()
 	rockets={}
 	monsters={}
 	pulses={}
-	
-	game={
-		level=1,
-	}
-	
+		
 	init_particles()
 	init_timers()
 	
 	smooth_mode=8
 	gen_map()
 	
-	for i=1,20 do
-		add_monster(flr(rnd(128)),flr(rnd(64)))
-	end
+	level_table={
+		{ 
+			max_mon=4, -- max monsters spawned
+			spawn_min_ival=3, -- minimum interval between spawns
+			spawn_chance=0.2, -- chance to spawn on spawn attempt
+			spawn_tick=0.5 -- try to spawn every
+		},
+	}
 	
+	gm={
+		level=1,
+		mon_count=0,
+		spawn_t0=0,
+		spawn_t1=0,
+	}
+	
+	init_level(1)
+		
 	sfx(16)
 end
 
@@ -133,7 +149,7 @@ function update()
 
 	update_ocean()
 	
-	
+	update_level()
 
 	update_heli(heli)
 	update_elements(bullets,update_bullet)
@@ -212,10 +228,11 @@ function update()
 		watch("msk:"..calc_dirt_mask(sel.x,sel.y,smooth_mode))
 		watch("val:"..mget(sel.x,sel.y))
 	end
+
 end
 
 function _draw()
-	cls()
+	cls(1)
 
 	if cam.ofdx~=0 or cam.ofdy~=0 then
 		for i=0,15 do
@@ -294,14 +311,26 @@ function _draw()
 	
 	-- hud panel
 	
-	rectfill(34,110,127,127,5)
-	rect(34,110,127,127,7)
+	rectfill(34,109,127,127,7)
+	rect(34,109,127,127,7)
 	
 	-- speedometer
 	
 	local l=sqrt(heli.dx*heli.dx+heli.dy*heli.dy)
 	local sf=l/heli.mx_spd
-	rectfill(35,111,35+16*sf,113,11)
+--	pbar(35,111,48,2,sf,3,11,3)
+	
+	local c=9
+	if heli.heat_lt0>0 and blink(1/4) then
+		c=8
+	end
+	pbar(55,110,48,4,heli.heat,4,c,3)
+	print("temp:",35,110,c)
+
+	print("hull:",35,116,12)
+	pbar(55,116,48,4,heli.armor,1,12,3)
+
+	print("thrt:",35,122,8)
 
 	offset_scr(cam.offx,cam.offy)
 
@@ -337,6 +366,87 @@ function _draw()
 		memcpy(0x6000+y*64,32*64+32,32)
 	end
 	end
+end
+
+function pbar(x,y,w,h,f,bg,fg,tk,tkc)
+	tk=tk or 0
+	tkc=tkc or 0
+	f=mid(f,0,1)
+	
+	rectfill(x,y,x+w,y+h,bg)
+	
+	if f>0 then
+		rectfill(x,y,x+w*f,y+h,fg)
+	end
+	
+	for i=1,tk do
+		local x=x+i*(w/(tk+1))
+		line(x,y,x,y+h,0)
+	end
+end
+
+function smnum(num,x,y)
+	if (num==nil) return
+	num=flr(num)
+	pal(7,0)
+	
+	stack={}
+
+	while num>0 do
+		local digit=num%10
+		num=flr(num/10)
+		add(stack,digit)
+	end
+	
+	
+	local j=0
+	for i=#stack,1,-1 do
+		sspr(stack[i]*4,56,4,4,j*4+x,y,4,4)
+		j+=1
+	end
+	
+	pal()
+end
+
+function get_lt()
+	return level_table[
+		mid(1,gm.level,#level_table)]
+end
+
+function init_level(level)
+	local lt=get_lt()
+	
+	clear(monsters)
+	
+	gm.level=level
+	gm.mon_count=0
+	gm.spawn_t0=lt.spawn_min_ival
+	gm.spawn_t1=lt.spawn_tick
+end
+
+function update_level()
+	local lt=get_lt()
+	if gm.mon_count<lt.max_mon then
+		if gm.spawn_t0>0 then
+			gm.spawn_t0-=dt
+		end
+		
+		gm.spawn_t1-=dt
+		if gm.spawn_t1<=0 then
+			gm.spawn_t1=lt.spawn_tick
+			if gm.spawn_t0<=0 then
+				if rnd()<lt.spawn_chance then
+					spawn_monster(rnd(128),rnd(64))
+					gm.spawn_t0=lt.spawn_min_ival
+				end
+			end
+		end
+	end	
+end
+
+function spawn_monster(x,y)
+	gm.mon_count+=1
+	add_monster(x,y)
 end
 
 k_map_w=32
@@ -459,7 +569,26 @@ function update_heli(h)
 	end
 	
 	h.t_fire-=dt
-	if btn(4) and h.t_fire<=0 then
+	local fire=btn(4)
+
+	if h.heat_lt0>0 then
+		h.heat_lt0-=dt
+		h.heat=h.heat_lt0/h.heat_locktime
+		if h.heat_lt0<=0 then
+			h.heat=0
+		end
+		fire=false
+	end
+	
+	if fire and h.t_fire<=0 then
+		h.heat+=h.heat_gain
+		h.heat_dt0=h.heat_
+	
+		if h.heat>=1 then
+			h.heat_lt0=h.heat_locktime
+			fire=false
+		end
+	
 		cam_knock(h.r,2,0.1)
 		--cam_shake(0.1,1)
 		sfx(1)
@@ -471,7 +600,14 @@ function update_heli(h)
 		end
 		h.ct_shot+=1
 		h.t_fire=h.fire_rate
+	else
+		if h.heat_lt0<=0 then
+			local d=h.heat_decay
+			h.heat-=d*dt
+		end
 	end
+	
+	h.heat=mid(h.heat,0,1)
 end
 
 function draw_mesh(x,y,r,mesh,bgcol,linecol)
@@ -586,8 +722,6 @@ function draw_bullet(b)
 	circ(fx,fy,1,10)	
 
 end
-
-
 
 function add_monster(x,y)
 	return add(monsters,{
@@ -915,6 +1049,10 @@ function update_ocean()
 		end
 	end
 end
+
+function init_rq()
+	rq={}
+end
 -->8
 -- util
 
@@ -1116,6 +1254,13 @@ function clear_destroyed(a)
 	compress(a,n)
 end
 
+function clear(a)
+	local n=#a
+	for i=1,n do
+		a[i]=nil
+	end
+end
+
 function ins(a,v,idx)
 	local n=#a
 	assert(idx>0 and idx<=n)
@@ -1173,6 +1318,18 @@ function update_timers()
 		end)
 end
 
+function sort(a,lt)
+	local n=#a
+	local i=2
+	while i<=n do
+		local j=i
+		while j>1 and lt(a[j],a[j-1]) do
+			a[j],a[j-1]=a[j-1],a[j]
+			j-=1
+		end
+		i+=1
+	end
+end
 -->8
 -- particles
 
@@ -1733,10 +1890,10 @@ ee82228ee82222ee0000000000eee000077777000777770000eee000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07007700777077700070077077707770777077700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+70700700077000707070700070000070707070700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+70700700700007707770077077700700777077700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07007770777077700070770077707000777000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
