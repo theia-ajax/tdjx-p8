@@ -4,6 +4,17 @@ __lua__
 -- heli
 -- tdjx
 
+g_seed=-1
+function gen()
+	g_seed+=1
+	gen_map(g_seed,{
+		island_ct=12,
+		island_iter=1000,
+		city_ct=25,
+		city_iter=20,
+	})
+end
+
 function _init()
 	poke(0x5f2d,1)
 
@@ -71,7 +82,6 @@ function _init()
 	}
 	
 	bullets={}
-	rockets={}
 	monsters={}
 	pulses={}
 		
@@ -79,14 +89,15 @@ function _init()
 	init_timers()
 	
 	smooth_mode=8
-	gen_map()
-	
+	gen()
+		
 	level_table={
 		{ 
 			max_mon=4, -- max monsters spawned
 			spawn_min_ival=3, -- minimum interval between spawns
 			spawn_chance=0.2, -- chance to spawn on spawn attempt
-			spawn_tick=0.5 -- try to spawn every
+			spawn_tick=0.5, -- try to spawn every
+			kill_target=4,
 		},
 	}
 	
@@ -95,6 +106,7 @@ function _init()
 		mon_count=0,
 		spawn_t0=0,
 		spawn_t1=0,
+		kill_score=0
 	}
 	
 	init_level(1)
@@ -153,7 +165,6 @@ function update()
 
 	update_heli(heli)
 	update_elements(bullets,update_bullet)
-	update_elements(rockets,update_rocket)
 	update_elements(monsters,update_monster)
 	update_elements(pulses,update_pulse)
 	
@@ -190,9 +201,10 @@ function update()
 				cam.shvt)
 	end
 	if btnp(5) then
-		local r=rnd()
-		cam.offx=cos(r)*64
-		cam.offy=sin(r)*64
+		--local r=rnd()
+		--cam.offx=cos(r)*64
+		--cam.offy=sin(r)*64
+		gen()
 	end
 	
 	cam.offx+=cam.ofdx
@@ -228,6 +240,8 @@ function update()
 		watch("msk:"..calc_dirt_mask(sel.x,sel.y,smooth_mode))
 		watch("val:"..mget(sel.x,sel.y))
 	end
+	
+	watch("rnd:"..g_seed)
 
 end
 
@@ -254,7 +268,6 @@ function _draw()
 	
 	foreach(monsters,draw_monster)
 	foreach(bullets,draw_bullet)
-	foreach(rockets,draw_rocket)
 	draw_heli(heli)
 	foreach(pulses,draw_pulse)
 	draw_particles()
@@ -270,14 +283,14 @@ function _draw()
 	-- hud start
 	
 	-- map bg
-	rectfill(0,110,33,127,0)
+	rectfill(0,110,33,127,1)
 	rect(0,110,33,127,7)
 	
 	-- draw map ground tiles
-	for x=0,-1 do
-		for y=0,-1 do
+	for x=0,31 do
+		for y=0,15 do
 			local xx,yy=x*4,y*4
-			local c=0
+			local c=nil
 			if is_dirt(xx,yy) then
 				c=3
 			elseif is_city(xx,yy) then
@@ -285,7 +298,7 @@ function _draw()
 			elseif is_rubble(xx,yy) then
 				c=5
 			end
-			pset(1+x,111+y,c)
+			if (c)	pset(1+x,111+y,c)
 		end
 	end
 	
@@ -321,8 +334,10 @@ function _draw()
 --	pbar(35,111,48,2,sf,3,11,3)
 	
 	local c=9
-	if heli.heat_lt0>0 and blink(1/4) then
-		c=8
+	if heli.heat_lt0>0 then
+		if (blink(1/4)) c=8
+	else
+		if (heli.heat>0.75) c=8
 	end
 	pbar(55,110,48,4,heli.heat,4,c,3)
 	print("temp:",35,110,c)
@@ -330,7 +345,8 @@ function _draw()
 	print("hull:",35,116,12)
 	pbar(55,116,48,4,heli.armor,1,12,3)
 
-	print("thrt:",35,122,8)
+	print("kill:",35,122,14)
+	pbar(55,122,48,4,gm.kill_score/get_lt().kill_target,2,14,3)
 
 	offset_scr(cam.offx,cam.offy)
 
@@ -582,11 +598,11 @@ function update_heli(h)
 	
 	if fire and h.t_fire<=0 then
 		h.heat+=h.heat_gain
-		h.heat_dt0=h.heat_
 	
 		if h.heat>=1 then
 			h.heat_lt0=h.heat_locktime
 			fire=false
+			sfx(12)
 		end
 	
 		cam_knock(h.r,2,0.1)
@@ -594,10 +610,6 @@ function update_heli(h)
 		sfx(1)
 		add_bullet(h.x,h.y,h.rr+rndr(-0.015,0.015),
 			{spd=25})
-		if h.ct_shot%8==0 then
-			add_rocket(h.x,h.y,h.rr-0.05)
-			add_rocket(h.x,h.y,h.rr+0.05)
-		end
 		h.ct_shot+=1
 		h.t_fire=h.fire_rate
 	else
@@ -740,6 +752,7 @@ end
 function update_monster(m)
 	if m.health<=0 then
 		m.destroy=true
+		gm.kill_score+=1
 	end
 	
 	m.t0+=sin(t()/16)/32
@@ -872,7 +885,7 @@ function draw_monster(m)
 end
 
 function find_bullet_hits()
-	local bn,mn,rn=#bullets,#monsters,#rockets
+	local bn,mn=#bullets,#monsters
 	
 	for i=1,mn do
 		for j=1,bn do
@@ -882,17 +895,6 @@ function find_bullet_hits()
 				local d=dist(b.x,b.y,m.x,m.y)
 				if d<m.rad+1/8 then
 					b.destroy=true
-					damage_monster(m,12)
-				end
-			end
-		end
-		for j=1,rn do
-			local m=monsters[i]
-			local r=rockets[j]
-			if not r.destroy then
-				local d=dist(r.x,r.y,m.x,m.y)
-				if d<m.rad+1/8 then
-					r.destroy=true
 					damage_monster(m,12)
 				end
 			end
@@ -928,107 +930,13 @@ function draw_pulse(p)
 	local px,py=w2s(p.x,p.y)
 	--cols={2,14,7,14}
 	--circfill(px,py,3+(flr(p.tf0/8)%2),cols[flr(p.t0*8)%4+1])
-	spr(82+flr(p.t0*20)%5,px-3,py-3)
-end
-
-function add_rocket(x,y,r,props)
-	local p=props or {}
-	return add(rockets,{
-		x=x,y=y,r=r,spd=0,
-		dx=0,dy=0,dr=0,
-		t_life=p.lifetime or 1.5,
-		length=p.length or 4,
-		mx_dr=p.mx_dr or 0.05,
-		accel=p.accel or 25,
-		mx_spd=p.mx_spd or 15,
-		t_seek=p.seek_delay or 0.5,
-		seek_rad=p.seek_rad or 6,
-		target=nil,
-		t0=0,
-		on_destroy=function(ro)
-			create_explosion(ro.x,ro.y,
-				0.5,0.03,6)
-		end,
-	})
-end
-
-function update_rocket(ro)
-	if ro.t_life>0 then
-		ro.t_life-=dt
-		if ro.t_life<=0 then
-			ro.destroy=true			
-		end
-
-		ro.t0+=dt
-		if ro.t0>=0.05 then
-			ro.t0=0
-			local pdx,pdy=direction(ro.r+.5)
-			
-			local hl=ro.length/16
-			local bx,by=cos(ro.r)*-hl+ro.x,
-				sin(ro.r)*-hl+ro.y
-		
-			add_particle(bx,by,{
-				lifetime=0.5,
-				col=12,
-				size=3,f_size=0,
-				dx=pdx*5+ro.dx,dy=pdy*5+ro.dy,
-				fric=0.05,
-				fade=true
-			})
-		end
-	end
-
-	if (ro.t_seek>0) ro.t_seek-=dt
-	
-	if not ro.target then
-		if ro.t_seek<=0 then
-			-- todo: find target
-			local mn=9999
-			local t=nil
-			for m in all(monsters) do
-				local d2=dist2(ro.x,ro.y,
-					m.x,m.y)
-				if d2<=sqr(ro.seek_rad) then
-					local d=sqrt(d2)
-					if d<mn then
-						mn=d
-						t=m
-					end
-				end
-			end
-			
-			ro.target=t
-		end
-	else
-		-- todo: turn
-		local t=ro.target
-		local tr=atan2(t.x-ro.x,
-			t.y-ro.y)
---		ro.r=moveto_angle(ro.r,tr,0.5*dt)
-		ro.r,ro.dr=damp_angle(
-			ro.r,tr,ro.dr,0.2,0.2)
-	end
-	
-	ro.spd+=ro.accel*dt
-	ro.spd=mid(ro.spd,0,ro.mx_spd)
-	
-	ro.dx,ro.dy=cos(ro.r)*ro.spd,
-		sin(ro.r)*ro.spd
-				
-	ro.x+=ro.dx*dt
-	ro.y+=ro.dy*dt
-end
-
-function draw_rocket(ro)
-	local hl=ro.length/2
-	local cx,cy=w2s(ro.x,ro.y)
-	local fx,fy=cos(ro.r)*hl+cx,
-		sin(ro.r)*hl+cy
-	local bx,by=cos(ro.r)*-hl+cx,
-		sin(ro.r)*-hl+cy
-	line(fx,fy,bx,by,6)
-	circ(bx,by,1,12)
+	cl={2,7,12,14}
+	pal(7,cl[flr(p.t0*16)%#cl+1])
+	local sz=16
+	sspr(flr(p.t0*20)%5*16+16,40,16,16,
+		px-(sz/2-1),py-(sz/2-1),sz,sz)
+--	spr(82+flr(p.t0*20)%5,px-3,py-3)
+	pal()
 end
 
 function w2s(wx,wy)
@@ -1040,12 +948,18 @@ function s2w(sx,sy)
 end
 
 function update_ocean()
-	spr_rectfill(2,0,0,7,7,1)
+	-- water effect
+	for x=0,7 do
+		for y=0,7 do
+			sset(16+x,y,1)
+		end
+	end
+
 	for x=0,7 do
 		for yy=0,1 do
 			local y=sin(x/8+yy/16+t()/4)*1+4*yy-t()/4
 			y=flr(y)%8
-			spr_pset(2,x,y,13)
+			sset(16+x,y,13)
 		end
 	end
 end
@@ -1516,102 +1430,9 @@ end
 
 
 -->8
--- spr functions
-
--- sprite to write to
--- data array of colors
-function set_spr(sp,data,sw,wh)
-	sw=sw or 1
-	sh=sh or 1
-	
-	local size=sw*sh*64
-	
-	assert(#data==size)
-	
-	for i=0,size-1,2 do
-		local ch=data[i+2]
-		local cl=data[i+1]
-		local sx=sp%16
-		local sy=flr(sp/16)
-		local lr=flr(i/16)
-		local lc=i%8
-		local addr=(sy+lr)*64+sx*4+lc
-		poke(px_addr(sp,i%8,flr(i/8)),bor(shl(ch,4),cl))
-	end
-end
-
-function spr_pset(sp,x,y,c)
-	x=flr(x) or 0
-	y=flr(y) or 0
-	c=c or 0
-	
-	if x<0 or x>127 or y<0 or y>127
-	then
-		return
-	end
-
-	local addr=px_addr(sp,x,y)
-
-	local v=peek(addr)
-	if x%2==0 then
-		-- left pixel in low bits		
-		-- clear low bits
-		v=band(v,0xf0)
-		-- set low bits to color
-		v=bor(v,band(c,0xf))
-	else
-		-- right pixel in high bits
-		v=band(v,0xf)
-		v=bor(v,shl(band(c,0xf),4))
-	end
-	
-	poke(addr,v)
-end
-
-function spr_pget(sp,x,y)
-	local addr=px_addr(sp,x,y)
-	if x%2==0 then
-		return band(peek(addr),0xf)
-	else
-		return shr(band(peek(addr),0xf),4)
-	end
-end
-
-function spr_rect(sp,x1,y1,x2,y2,c)
-	for xx=x1,x2 do
-		spr_pset(sp,xx,y1,c)
-		spr_pset(sp,xx,y2,c)
-	end
-	
-	for yy=y1+1,y2-1 do
-		spr_pset(sp,x1,yy,c)
-		spr_pset(sp,x2,yy,c)
-	end
-end
-
-function spr_rectfill(sp,x1,y1,x2,y2,c)
-	for xx=x1,x2 do
-		for yy=y1,y2 do
-			spr_pset(sp,xx,yy,c)
-		end
-	end
-end
-
-function px_addr(sp,lx,ly)	
-	local row=flr(sp/16)*8+ly
-	local col=sp%16*4+flr(lx/2)
-	
-	return row*64+col
-end
--->8
 -- mapgen
 
-function gen_map(seed)
-	cls(1)
-	print("generating...",30,60,7)
-	flip()
-
-	if true then
+function gen_map(seed,props)
 	if (seed) srand(seed)
 	
 	for x=0,127 do
@@ -1620,45 +1441,106 @@ function gen_map(seed)
 		end
 	end
 	
-	local island_ct=48
+	local p=props or {}
+	assert(p.island_ct)
+	assert(p.island_iter)
+	assert(p.city_ct)
+	assert(p.city_iter)
+	local island_ct=p.island_ct or 24
+	local island_iter=p.island_iter or 600
+	local city_ct=p.city_ct or 25
+	local city_iter=p.city_iter or 100
+	
 	for i=1,island_ct do
---		map_rect(flr(rnd(128)),flr(rnd(64)),
---			flr(rnd(12))+1,flr(rnd(10))+1,
---			16)
-		map_circ(flr(rnd(128)),flr(rnd(64)),
-			flr(rnd(6))+2,16)
+		gen_island(flr(rnd(128)),flr(rnd(64)),island_iter,
+			function(x,y) return true end,
+			function(x,y) mset(x,y,16) end,
+			{
+				{1,0},{-1,0},{0,1},{0,-1}
+			})
 	end
-	
-	for i=0,island_ct*2 do
-		map_rect(flr(rnd(128)),flr(rnd(128)),
-		 flr(rnd(2)),flr(rnd(20))+1,16)
-		map_rect(flr(rnd(128)),flr(rnd(128)),
-			flr(rnd(20))+1,flr(rnd(2)),16)
-	end
-	end
-	
-	smooth_land(smooth_mode)
 
-	for i=0,50 do
-		local x,y=0,0
-		while mget(x,y)~=16 do
-			x=flr(rnd(128))
-			y=flr(rnd(64))
-		end
+	smooth_land(smooth_mode)
+	smooth_water()
+
+	for i=1,city_ct do
+		local x,y=get_coord_until(
+			function(x,y)
+				return mget(x,y)==16
+			end,
+			32)
 		
-		for j=0,200 do
-			if mget(x,y)==16 then
-				mset(x,y,3+flr(rnd(4)))
+		if x>=0 and y>=0 then
+			gen_island(x,y,city_iter,
+				function(x,y) return mget(x,y)==16 end,
+				function(x,y) mset(x,y,3+flr(rnd(4))) end)
+		end
+	end
+end
+
+function get_coord_until(fn_pred,mx)
+	local x,y=0,0
+	mx=mx or 32767
+	local i=0
+	while not fn_pred(x,y) do
+		i+=1
+		if (i>mx) return -1,-1
+
+		x=flr(rnd(128))
+		y=flr(rnd(64))
+	end
+	return x,y
+end
+
+_mv_tbl={
+	{1,0},{-1,0},{1,0},{-1,0},{0,1},{0,-1}
+}
+function gen_island(x,y,ct,fn_valid,fn_set,mt)
+	x=x or 0
+	y=y or 0
+	mt=mt or _mv_tbl
+	for n=1,ct do
+		if fn_valid(x,y) then
+			fn_set(x,y)
+		end
+		local d=flr(rnd(#_mv_tbl))
+		local mt=_mv_tbl[d+1]
+		local mx,my=mt[1],mt[2]
+		x=mid(x+mx,0,127)
+		y=mid(y+my,0,63)
+	end
+end
+
+function map_rect(x,y,w,h,v)
+	for xx=x,min(x+w,127) do
+		for yy=y,min(y+h,63) do
+			mset(xx,yy,v)
+		end
+	end
+end
+
+function map_circ(x,y,r,v)
+	for xx=max(x-r,0),min(x+r,127) do
+		for yy=max(y-r,0),min(y+r,63) do
+			local dx,dy=xx-x,yy-y
+			if sqrt(dx*dx+dy*dy)<=r then
+				mset(xx,yy,v)
 			end
-			local d=flr(rnd(5))
-			if d==1 then
-				x+=1
-			elseif d==2 then
-				x-=1
-			elseif d==3 then
-				y+=1
-			elseif d==4 then
-				y-=1
+		end
+	end
+end
+
+function smooth_water()
+	for y=0,63 do
+		for x=0,127 do
+			if mget(x,y)==2 then
+				for yy=y-1,y+1 do
+					for xx=x-1,x+1 do
+						if is_dirt(xx,yy) then
+							mset(x,y,1)
+						end
+					end
+				end
 			end
 		end
 	end
@@ -1679,25 +1561,6 @@ function smooth_dirt_tile(x,y,mode)
 	local m=calc_dirt_mask(x,y,mode)
 	local d=get_dirt_tile(m,mode)
 	mset(x,y,d)
-end
-
-function map_rect(x,y,w,h,v)
-	for xx=x,min(x+w,127) do
-		for yy=y,min(y+h,63) do
-			mset(xx,yy,v)
-		end
-	end
-end
-
-function map_circ(x,y,r,v)
-	for xx=max(x-r,0),min(x+r,127) do
-		for yy=max(y-r,0),min(y+r,63) do
-			local dx,dy=xx-x,yy-y
-			if sqrt(dx*dx+dy*dy)<=r then
-				mset(xx,yy,v)
-			end
-		end
-	end
 end
 
 function get_dirt_tile(idx,m)
@@ -1812,6 +1675,8 @@ _dirt_table_4={
 
 
 -->8
+
+-->8
 -- todo
 
 -- monsters:
@@ -1834,14 +1699,14 @@ _dirt_table_4={
 --			scoring,
 --			high scores?
 __gfx__
-0000000056565656111111113637533377a533352d33d65d66333351353353353353355335535333355335330000000000000000000000000000000000000000
-00000000666666651dddd1115557566a757577751133225156161651355555535555555555555556555555550000000000000000000000000000000000000000
-00700700566666661111ddd137775ddda775ddd555555553dddddd5d553556553535565555655655556553530000000000000000000000000000000000000000
-00077000666666651111111136665555ddd5555533577d5355555555355565553555555335555553355555530000000000000000000000000000000000000000
-000770005666666611111111555556665555ddd57757a75733563653355555535556555535556555555565550000000000000000000000000000000000000000
-007007006666666511ddd111686656565d65d8d5665d7756dd56665d556556553565565355355655356556530000000000000000000000000000000000000000
-00000000566666661111ddd1dddd5ddd53356665555ddd5522566652555555563555555335555553355555530000000000000000000000000000000000000000
-00000000656565651111111155555555555555556655555633555555355353335355356335335335365355350000000000000000000000000000000000000000
+0000000011111111111111113637533377a533352d33d65d66333351353353353353355335535333355335330000000000000000000000000000000000000000
+000000001dddd1111dddd1115557566a757577751133225156161651355555535555555555555556555555550000000000000000000000000000000000000000
+007007001111ddd11111ddd137775ddda775ddd555555553dddddd5d553556553535565555655655556553530000000000000000000000000000000000000000
+00077000111111111111111136665555ddd5555533577d5355555555355565553555555335555553355555530000000000000000000000000000000000000000
+000770001111111111111111555556665555ddd57757a75733563653355555535556555535556555555565550000000000000000000000000000000000000000
+0070070011ddd11111ddd111686656565d65d8d5665d7756dd56665d556556553565565355355655356556530000000000000000000000000000000000000000
+000000001111ddd11111ddd1dddd5ddd53356665555ddd5522566652555555563555555335555553355555530000000000000000000000000000000000000000
+00000000111111111111111155555555555555556655555633555555355353335355356335335335365355350000000000000000000000000000000000000000
 3b13313311ff1fffff33333333133333331333f1f1fff111fffffffff33333333333333f3333fff11f3333333333333333333333ffff1111f333333f11ffffff
 11333b13ffffff33f3313b1331b13b1331b133f13f33fff1f33f3f33f333bb133333bb1f333333ffff333b133333bb133333bb13f33ffff1f333bb1f1ff3ff33
 3b1b31333333f333ff3131331b1331331b1b13f1333333fff3333333f33311333b1311313b13333ff33331333b3311333b131133f33333ffff33113f1f333333
@@ -1874,19 +1739,19 @@ ff3333ff000000000000000000000000000000000000000000000000000000000000000000000000
 0022eee88eee2200dedeeded00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2222ee8228ee22220deeeed000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 ee228282282822ee00deed0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-22288828828882220000000000000000007770000077700000000000000000000000000000000000000000000000000000000000000000000000000000000000
-ee82228ee82222ee0000000000eee000077777000777770000eee000000000000000000000000000000000000000000000000000000000000000000000000000
-0088288ee8828800002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
-02e0828ee8280e20002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
-2e008828828800e2002220000eeeee0077777770777777700eeeee00000000000000000000000000000000000000000000000000000000000000000000000000
-0002e08ee80e20000000000000eee000077777000777770000eee000000000000000000000000000000000000000000000000000000000000000000000000000
-022e00e00e00e2200000000000000000007770000077700000000000000000000000000000000000000000000000000000000000000000000000000000000000
-2e000e8008e000e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+22288828828882220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+ee82228ee82222ee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0088288ee88288000000000000000000000000000000000000000000000000000000000700000000000000000000000000000000000000000000000000000000
+02e0828ee8280e200000000000000000000000000000000000000077700000000000007770000000000000000000000000000000000000000000000000000000
+2e008828828800e20000000000000000000000777000000000007777777000000000777777700000000000777000000000000000000000000000000000000000
+0002e08ee80e20000000000700000000000007777700000000007777777000000000777777700000000007777700000000000000000000000000000000000000
+022e00e00e00e2200000007770000000000077777770000000077777777700000007777777770000000077777770000000000000000000000000000000000000
+2e000e8008e000e20000077777000000000077777770000000077777777700000077777777777000000077777770000000000000000000000000000000000000
+00000000000000000000007770000000000077777770000000077777777700000007777777770000000077777770000000000000000000000000000000000000
+00000000000000000000000700000000000007777700000000007777777000000000777777700000000007777700000000000000000000000000000000000000
+00000000000000000000000000000000000000777000000000007777777000000000777777700000000000777000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000077700000000000007770000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000700000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2141,7 +2006,7 @@ __sfx__
 011000000e5530e00313655136550e5530e50313655136050e5530e00313655136550e5530e50313655136050e5530e00313655136550e5530e50313655136050e5530e00313655136550e5530e5031365513605
 01100000175501742019550194201c5501c4201e5501e4202055521555235552155520555255552655526200175521742019551194201c5511c4201e5511e4202855526555255552655528555235552155521400
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0110000018630166301662013620116200c6200a6200a6100761007610056100561502600116000f6000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
