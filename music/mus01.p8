@@ -1,12 +1,11 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
--- kids - mgmt
--- pico8 cover
-
+-- mus01
+-- tdjx
 
 function _init()
-	music(8)
+	music(5)
 	vol={0,0,0,0}
 end
 
@@ -30,51 +29,21 @@ end
 function lerp(a,b,t)
 	return a+(b-a)*t
 end
-k_e=2.7182
+
 function _draw()
 	cls()
-	
-	local vsum=0
-	for i=1,#vol do
-		vsum+=vol[i]
-	end
-	local vf=vsum/(63*#vol)
-	
-	cols={2,8,9,10}
-	srand()
-	for i=4,1,-1 do
-		local mxct=200
-		local ct=(mxct-1)*(vol[i]-2)/63
-		for n=0,ct do
-			local a=8*k_e*n+(i-1)/16
-			local rad=3
-			local x=cos(a)*rad
- 		local y=-n/mxct*8+2
- 		local z=sin(a)*rad
- 		local r=t()/4
- 		local wx=cos(r)*x-sin(r)*z
- 		local wz=sin(r)*x+cos(r)*z+5
- 		local sx=64+64*wx/wz
- 		local sy=64+64*y/wz
- 		circfill(sx,sy,max((9-wz+i),0),cols[(i+n)%4+1])
- 	end
- end
-
 	
 	for i=0,3 do
 		local v,n=getvol(i)
 		
 		v=v+(n or 0)
 
-		vol[i+1]=lerp(vol[i+1],v,0.4)
+		vol[i+1]=lerp(vol[i+1],v,0.2)
 		
 --		local y=128-(vol[i+1]/63*128)
 --		rectfill(i*32,y,(i+1)*32,128,7)
-		draw_vol(i*32,31,vol[i+1])
+		draw_vol(i*32+4,31-8,vol[i+1])
 	end
-
-	
-	
 end
 
 colors={2,8,8,9,9,10,10,7,7,7,7}

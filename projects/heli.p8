@@ -7,7 +7,7 @@ __lua__
 g_seed=-1
 function gen()
 	g_seed+=1
-	gen_map(g_seed,{
+	seq_gen_map(g_seed,{
 		island_ct=18,
 		island_iter=1000,
 		city_ct=25,
@@ -21,6 +21,7 @@ function _init()
 	dbg={
 		fbf=false,
 		adv=false,
+		watch=true,
 	}
 	
 	mos={
@@ -28,7 +29,7 @@ function _init()
 		px=0,py=0,pbt=0
 	}
 
-	sel={x=-1,y=-1}
+	sel={x=-1,y=-1,ld=-1}
 	music(0)
 	heli={
 		x=8,y=8,
@@ -137,6 +138,8 @@ function keypress(key)
 		smooth_land()
 	elseif key=="g" then
 		gen()
+	elseif key=="w" then
+		dbg.watch=not dbg.watch
 	end
 end
 
@@ -247,6 +250,7 @@ function update()
 		watch("sel:"..sel.x..","..sel.y)
 		watch("msk:"..calc_dirt_mask(sel.x,sel.y,smooth_mode))
 		watch("val:"..mget(sel.x,sel.y))
+		watch("dep:"..sel.ld)
 	end
 	
 	watch("rnd:"..g_seed)
@@ -359,7 +363,7 @@ function _draw()
 
 	offset_scr(cam.offx,cam.offy)
 
-	draw_watch()
+	if (dbg.watch) draw_watch()
 	
 	if peek(0x5f2d)==1 then
 		circ(mos.x,mos.y,1,11)
@@ -1035,19 +1039,26 @@ end
 __watch={}
 
 function watch(m)
+	m=tostr(m)
+	local len=#m*4
+	if (len>__watch.sx) __watch.sx=len
+	__watch.sy+=6
 	add(__watch,m)
 end
 
 function update_watch()
-	__watch={}
+	__watch={sx=0,sy=0}
 end
 
 function draw_watch()
 	local n=#__watch
+	fillp(0b01010010110100101.1)
+	rectfill(0,0,__watch.sx,__watch.sy,0)
 	for i=1,n do
 		local m=__watch[i]
 		print(m,0,(i-1)*6,11)
 	end
+	fillp()
 end
 
 function mod(a,b)
@@ -1264,6 +1275,60 @@ function sort(a,lt)
 		i+=1
 	end
 end
+
+-- xorshift16 sort of
+function rgen(seed,ct)
+	seed=seed or 1
+	ct=ct or 0
+	local ret={
+		seed=seed,
+		sx=seed,
+		count=0,
+		_next=function(self)
+			self.count+=1
+			self.sx=bxor(self.sx,shl(self.sx,7))
+			self.sx=bxor(self.sx,shr(self.sx,9))
+			self.sx=bxor(self.sx,shl(self.sx,8))
+			return self.sx
+		end,
+		next=function(self,mn,mx)
+			if not mn then
+			 mn,mx=0,1
+			elseif not mx then
+				mx,mn=mn,0
+			elseif mx<mn then
+				mn,mx=mx,mn
+			end
+			
+			local f=(self:_next()/32767+1)/2
+			return f*(mx-mn)+mn
+		end,
+		reset=function(self,ct)
+			self.state=self.seed
+			self.count=0
+			for i=1,ct do
+				self:next()
+			end
+		end,
+		clone=function(self)
+			return rgen(self.seed,self.count)
+		end
+	}
+	for i=1,ct do ret:next() end
+	return ret
+end
+
+function q_push(q,v)
+	return add(q,v)
+end
+
+function q_pop(q)
+	if (#q==0) return nil
+	local ret=q[1]
+	idel(q,1)
+	return ret
+end
+
 -->8
 -- particles
 
@@ -1452,14 +1517,28 @@ end
 -->8
 -- mapgen
 
+function gen_bar(title,frac)
+	frac=frac or 0
+	cls(1)
+	local msg="generating"
+	print(msg,centerx(msg),54,7)
+	print(title,centerx(title),60,7)
+	rectfill(0,66,frac*128,70,7)
+	flip()
+end	
+
+function centerx(msg)
+	return 64-#msg*2
+end
+
+function seq_gen_map(seed,props)
+	gen_map(seed,props)
+end
+
 function gen_map(seed,props)
 	if (seed) srand(seed)
 	
-	for x=0,127 do
-		for y=0,63 do
-			mset(x,y,2)
-		end
-	end
+	memset(0x1000,2,8192)
 	
 	local p=props or {}
 	assert(p.island_ct)
@@ -1478,14 +1557,11 @@ function gen_map(seed,props)
 			{
 				{1,0},{-1,0},{0,1},{0,-1}
 			})
+		gen_bar("creating islands",i/island_ct)
 	end
 	
-	
-					
-			
-
---	smooth_land(smooth_mode)
 	smooth_water()
+	smooth_land(smooth_mode)
 
 	for i=1,city_ct do
 		local x,y=get_coord_until(
@@ -1499,6 +1575,7 @@ function gen_map(seed,props)
 				function(x,y) return mget(x,y)==16 end,
 				function(x,y) mset(x,y,3+flr(rnd(4))) end)
 		end
+		gen_bar("adding cities",i/city_ct)
 	end
 end
 
@@ -1568,38 +1645,77 @@ function map_fill(x,y,fill,with)
 	end
 end
 
-function map_rect(x,y,w,h,v)
-	for xx=x,min(x+w,127) do
-		for yy=y,min(y+h,63) do
-			mset(xx,yy,v)
+function fill_lake(x,y,dep)
+	if mget(x,y)==2 then
+		local sz=calc_lake_size(x,y,dep+1)
+		if sz<=dep then
+			map_fill(x,y,2,16)
 		end
 	end
 end
 
-function map_circ(x,y,r,v)
-	for xx=max(x-r,0),min(x+r,127) do
-		for yy=max(y-r,0),min(y+r,63) do
-			local dx,dy=xx-x,yy-y
-			if sqrt(dx*dx+dy*dy)<=r then
-				mset(xx,yy,v)
-			end
+function calc_lake_size(x,y,mx)
+	local openq={}
+	local closed={}
+	local meta={}
+	
+	mx=mx or 20
+	local maxdep=0
+	
+	local hash=function(x,y)
+		return bor(shl(band(x,0xff),8),band(y,0xff))
+	end
+	
+	if mget(x,y)==2 then
+		add(openq,{x=x,y=y})
+		meta[hash(x,y)]=0
+	end
+	
+	while #openq>0 do
+		local subroot=openq[1]
+		idel(openq,1)
+		local xx,yy=subroot.x,subroot.y
+		local subh=hash(xx,yy)
+	
+		local children={
+			{x=xx-1,y=yy},
+			{x=xx+1,y=yy},
+			{x=xx,y=yy-1},
+			{x=xx,y=yy+1},
+		}
+	
+		local dep=meta[subh] or 0
+		
+		if dep<mx then
+ 		for child in all(children) do
+ 			local h=hash(child.x,child.y)
+ 			if not closed[h] and mget(child.x,child.y)==2 then
+ 				closed[h]=true
+ 				add(openq,child)
+ 				meta[h]=dep+1
+ 				if meta[h]>maxdep then
+ 					maxdep=meta[h]
+ 				end
+ 			end
+ 		end
 		end
 	end
+	
+	return maxdep
 end
 
 function smooth_water()
+	local last_t=t()
 	for y=0,63 do
 		for x=0,127 do
 			if mget(x,y)==2 then
-				for yy=y-1,y+1 do
-					for xx=x-1,x+1 do
-						if is_dirt(xx,yy) then
---							mset(x,y,1)
-						end
-					end
-				end
+				fill_lake(x,y,3)
 			end
 		end
+  if y%8==0 or t()-last_t>0.2 then
+   gen_bar("filling small ponds",y/63)
+   last_t=t()
+  end
 	end
 end
 
@@ -1618,6 +1734,7 @@ function smooth_land(mode)
 				end
 			end
 		end
+		if (x%4==0)	gen_bar("smoothing coastline",x/127)
 	end
 	
 	for wf in all(water_fill) do
