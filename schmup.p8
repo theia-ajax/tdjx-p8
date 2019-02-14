@@ -2,24 +2,34 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 function _init()
-	plr=player:new()
+	plr=player:new({x=24,y=64})
 	bullets={}
 	stars={}
+	enemies={}
 	
 	star_col={11,12,10,9,8}
 	star_col={5,6,7,5,6,7}
 	star_col={8,12,10,10,10,10}
-	star_cl_ct=18
-	star_cl_min=3
-	star_cl_max=5
+	star_cl_ct=30
+	star_cl_min=12
+	star_cl_max=50
+	star_cl_x_min=-100
+	star_cl_x_max=100
+	star_cl_y_min=-30
+	star_cl_y_max=30
+	star_cl_z_min=25
+	star_cl_z_max=40
+	star_cl_rad_min=2
+	star_cl_rad_max=6
 	star_cluster_size=3
-	star_seed=200
+	star_seed=202
 	star_r=rgen(star_seed)
 	for i=1,star_cl_ct do
 		st=flr(star_r:next(#star_col))+1
-		local cx,cy,cz=star_r:next(-40,40),
-			star_r:next(-30,30),
-			star_r:next(25,40)
+		local cx,cy,cz=
+			star_r:next(star_cl_x_min,star_cl_x_max),
+			star_r:next(star_cl_y_min,star_cl_y_max),
+			star_r:next(star_cl_z_min,star_cl_z_max)
 			
 		local seed=star_seed+i*100+st*10
 		add(stars,{
@@ -36,17 +46,20 @@ function _init()
 			f=0,height=16,targ=0,
 			bg=0x1.a5a5,fg=9
 		},
+		star_speed_impulse=20,
+		star_speed_hyper=750,
 		star_speed=10,
 		player=plr,
+		move_speed=20,
 	}
-
-	
-	
 	
 	poke(0x5f2d,1)
 	
 	sequences={}
-	sequence(seq_player_intro)
+	--sequence(seq_player_intro)
+	gm.star_speed=gm.star_speed_impulse
+	
+	add_enemy(eyemonster,100,60)
 end
 
 function is_dev() return peek(0x5f2d)~=0 end
@@ -59,6 +72,8 @@ function keypressed(key)
 		gm.player.gun_level+=1
 	elseif key=="-" then
 		gm.player.gun_level-=1
+	elseif key=="h" then
+		sequence(seq_player_intro)
 	end
 end
 
@@ -85,6 +100,7 @@ function update(dt)
 		if costatus(seq)=="suspended"
 		then
 			assert(coresume(seq))
+			--coresume(seq)
 		else
 			del(sequences,seq)
 		end
@@ -93,11 +109,11 @@ function update(dt)
 	foreach(stars,
 		function(s)
 			s.cx-=gm.star_speed*gm.dt
-			if s.cx<-40 then
-				s.cx+=80
-				s.cy=s.r:next(-30,30)
-				s.cz=s.r:next(25,40)
-				s.seed=flr(s.r:next(1000))
+			if s.cx<-100 then
+				s.cx+=200+s.r:next(5)
+				s.cy=s.r:next(star_cl_y_min,star_cl_y_max)
+				s.cz=s.r:next(star_cl_z_min,star_cl_z_max)
+				s.seed=flr(s.r:next(10000))
 				s.r:reset(0,s.seed)
 			end
 		end
@@ -110,6 +126,31 @@ function update(dt)
 	
 	foreach(bullets,
 		function(b) b:update(dt) end)
+		
+	foreach(enemies,
+		function(e) e:update(dt) end)
+		
+	watch_stat(0)
+	watch_stat(1)
+end
+
+_stat_labels={
+	{l="mem",s=1/204.8},
+	{l="cpu",s=100},
+	{l="drw",s=100},
+}
+
+function watch_stat(s,label)
+	local lb=_stat_labels[s+1]
+	local label,scl=lb.l,lb.s
+	local sperc=band(stat(s)*scl,0xffff)
+	local col=11
+	if sperc>=45 then
+		col=8
+	elseif sperc>=35 then
+		col=9
+	end
+	watch(label..":"..sperc.."%",col)
 end
 
 function sequence(seq)
@@ -132,8 +173,10 @@ function _draw()
 				sr:next(-1,1),
 				sr:next(-1,1)
 
-			vx,vy,vz=norm3(vx,vy,vz)
-			local rad=sr:next(1,4)
+--			vx,vy,vz=norm3(vx,vy,vz)
+			local rad=sr:next(
+					star_cl_rad_min,
+					star_cl_rad_max)
 			sx+=vx*rad
 			sy+=vy*rad
 			sz+=vz*rad
@@ -147,7 +190,8 @@ function _draw()
 		end
 	end
 	
-	plr:draw()	
+	plr:draw()
+	foreach(enemies,function(e) e:draw() end)
 	foreach(bullets,function(b) b:draw() end)
 	
 	--spr(20,60,60)
@@ -161,6 +205,11 @@ function _draw()
 	if is_dev() then
 		circ(stat(32),stat(33),1,11)
 	end
+end
+
+function add_enemy(etype,x,y)
+	return add(enemies,
+		etype:new({x=x,y=y}))
 end
 
 function letterbox(h,bg,fg)
@@ -207,14 +256,14 @@ player={
 		{
 			shot_sp=12,
 			ship_sp=18,
-			burst_ct=3,
-			burst_ivl=14,
+			burst_ct=2,
+			burst_ivl=12,
 		},
 		{
 			shot_sp=24,
 			ship_sp=19,
 			burst_ct=3,
-			burst_ivl=7,
+			burst_ivl=8,
 		},
 	},
 	gun_level=1,
@@ -266,51 +315,75 @@ end
 
 function player:draw()
 
-	if gm.star_speed/100>0.2 then
+	if gm.star_speed>200 then
 --		fillp(0xf0f0)
- 	local trail_col={10,9,8,1}
- 	local th=flr(gm.star_speed/100)
- 	local tx,ty=self.x-5,64-th*#trail_col/2
- 	for i=1,#trail_col do
- 		local y=ty+(i-1)*th
- 		rectfill(0,y,127,y+th-1,trail_col[i])
- 	end
+ 	local trail_col={7,8,9,1,1,1,1,1,8,9,7}
+ 	local tn=#trail_col
+ 	local th=flr(gm.star_speed/200)
+		local ty=64-th*tn/2
+
+		if th>0 then
+ 		for i=1,#trail_col do
+ 			local y=ty+(i-1)*th
+ 			rectfill(0,y,127,y+th-1,trail_col[i])
+	 	end
+	 end
+ 		
+--[[ 	local w=ceil(128/3)
+ 	for i=0,tn do
+ 		local ii=(i+1)%tn
+ 		local x=(i*w-t()*64)%(128+w)-w
+ 		rectfill(x,ty,x+w,ty+th*4,trail_col[ii+1])
+ 	end]]
+ 	
  	fillp()
  end
-
+ 
 	local gun=self.guns[mid(self.gun_level,1,#self.guns)]
 	spr(gun.ship_sp,self.x-self.w,self.y-self.h)
+	
+	pal()
+	
 	spr(48+(t()*16)%4,self.x-self.w-6,self.y-self.h) 	
+
 end
 
 function seq_player_intro()
-	gm.star_speed=0
 	gm.lbox.targ=0
 
 	p=gm.player
 
 	p.lock_input=true
-	p.x=24
-	p.y=64
-	p.dx=0
+	p.dx,p.dy=0,0
+
+	do_until(
+		function()
+			p.x=move_to(p.x,24,20*gm.dt)
+			p.y=move_to(p.y,64,20*gm.dt)
+			gm.star_speed=lerp(
+				gm.star_speed,0,2*gm.dt)
+		end,
+		function()
+			return p.x==24 and p.y==64
+				and gm.star_speed<1
+		end)
+	
+	gm.star_speed=0
 	
 	wait_sec(1)
 	
-	local warp_star_speed=750
 	gm.lbox.targ=1.5
-	p.dx=100
+	p.dx=250
 	local targ=24
-	
-	yield()
-	
+
 	do_until(
  	function()
- 		p.dx-=ceil(p.dx*0.5*gm.dt)
+ 		p.dx-=ceil(p.dx*2.4*gm.dt)
  		p.dx=max(p.dx,0)
  		--gm.star_speed-=100*gm.dt
  		gm.star_speed=move_to(
  			gm.star_speed,
- 			warp_star_speed,
+ 			gm.star_speed_hyper,
  			5000*gm.dt)
  	end,
  	function()
@@ -318,20 +391,22 @@ function seq_player_intro()
  	end
  )
 	
-	wait_sec(1)
+	wait_sec(2)
+	
 	local mark=p.x
 	
 	do_until(
  	function()
  		p.x=move_to(p.x,targ,40*gm.dt)
- 		gm.star_speed=lerp(warp_star_speed,20,ilerp(mark,targ,p.x))
+ 		gm.star_speed=lerp(gm.star_speed_hyper,gm.star_speed_impulse,ilerp(mark,targ,p.x))
  		gm.lbox.targ=move_to(gm.lbox.targ,0,2*gm.dt)
  	end,
  	function()
  		return p.x==targ
  	end
  )
-
+ 
+	gm.star_speed=gm.star_speed_impulse 
 	gm.lbox.targ=0
 	p.dx=0
 	
@@ -380,6 +455,155 @@ end
 function powerup:update(dt)
 	
 end
+-->8
+function include_helper(to,from,seen)
+	if from==nil then
+		return to
+	elseif type(from)~='table' then
+		return from
+	elseif seen[from] then
+		return seen[from]
+	end
+	
+	seen[from]=to
+	for k,v in pairs(from) do
+		k=include_helper({},k,seen)
+		if to[k]==nil then
+			to[k]=include_helper({},v,seen)
+		end
+	end
+	return to
+end
+
+function include(class,other)
+	return include_helper(class,other,{})
+end
+
+local function clone(other)
+	return setmetatable(include({},other),
+		getmetatable(other))
+end
+
+local function new(class)
+	class=class or {}
+	local inc=class.__includes or {}
+	if (getmetatable(inc)) inc={inc}
+	
+	for other in all(inc) do
+		include(class,other)
+	end
+	
+	class.__index=class
+	class.init=class.init or class[1] or function() end
+	class.include=class.include or include
+	class.clone=class.clone or clone
+	
+	return setmetatable(class,{
+		__call=function(c,...)
+			local o=setmetatable({},c)
+			o:init(...)
+			return o
+		end})
+end
+
+class=setmetatable(
+	{new=new,include=include,clone=clone},
+	{__call=function(_,...) return new(...) end})
+-->8
+
+-->8
+-- xorshift16 sort of
+function rgen(seed,ct)
+	seed=seed or 1
+	ct=ct or 0
+	local ret={
+		seed=seed,
+		sx=seed,
+		count=0,
+		_next=function(self)
+			self.count+=1
+			self.sx=bxor(self.sx,shl(self.sx,7))
+			self.sx=bxor(self.sx,shr(self.sx,9))
+			self.sx=bxor(self.sx,shl(self.sx,8))
+			return self.sx
+		end,
+		next=function(self,mn,mx)
+			if not mn then
+			 mn,mx=0,1
+			elseif not mx then
+				mx,mn=mn,0
+			elseif mx<mn then
+				mn,mx=mx,mn
+			end
+			
+			local f=(self:_next()/32767+1)/2
+			return f*(mx-mn)+mn
+		end,
+		reset=function(self,ct,seed)
+			ct=ct or 0
+			self.seed=seed or self.seed
+			self.state=self.seed
+			self.count=0
+			for i=1,ct do
+				self:next()
+			end
+		end,
+		clone=function(self)
+			return rgen(self.seed,self.count)
+		end
+	}
+	for i=1,ct do ret:next() end
+	return ret
+end
+-->8
+-- enemies
+
+enemy={
+	const={
+		k_state_idle=0,
+		k_state_active=1,
+	},
+
+	x=0,y=0,
+	dx=0,dy=0,
+	w=8,h=8, --half width/height
+	state=0,
+	sp=0,
+	sw=1,sh=1,
+}
+
+function enemy:new(e)
+	self.__index=self
+	return setmetatable(e or {},self)
+end
+
+function enemy:update(dt)
+	if self.state==enemy.const.k_state_idle then
+		self.x-=gm.move_speed*dt
+	end
+end
+
+function enemy:draw()
+	if self.sp>0 then
+		spr(self.sp,self.x-self.w,
+			self.y-self.h,
+			self.sw,self.sh)
+	end
+end
+
+eyemonster=enemy:new({sp=36,sw=2,sh=2})
+
+-->8
+-- todo/notes
+
+-- buckets:
+-- 	entities
+--		drawables
+--		players				
+--		enemies
+--		bullets
+-->8
+
 -->8
 function input_xy(p)
 	p=p or 0
@@ -463,16 +687,16 @@ end
 
 _watches={}
 
-function watch(msg)
-	add(_watches,msg)
+function watch(msg,col)
+	add(_watches,{msg=msg,col=col or 11})
 end
 
 function draw_watch(col)
 	col=col or 11
 	local n=#_watches
 	for i=0,n-1 do
-		print(_watches[i+1],
-			0,i*6,col)
+		local w=_watches[i+1]
+		print(w.msg,0,i*6,w.col)
 	end
 end
 
@@ -501,7 +725,7 @@ function accel_to(from,to,vel,accel,maxdelta)
 	vel=mid(-maxdelta,vel,maxdelta)
 	return from+vel,vel
 end
--->8
+
 function wait_pred(pred)
 	while not pred() do
 		yield()
@@ -546,83 +770,39 @@ function do_until(fn,pred)
 		yield()
 	end
 end
--->8
--- xorshift16 sort of
-function rgen(seed,ct)
-	seed=seed or 1
-	ct=ct or 0
-	local ret={
-		seed=seed,
-		sx=seed,
-		count=0,
-		_next=function(self)
-			self.count+=1
-			self.sx=bxor(self.sx,shl(self.sx,7))
-			self.sx=bxor(self.sx,shr(self.sx,9))
-			self.sx=bxor(self.sx,shl(self.sx,8))
-			return self.sx
-		end,
-		next=function(self,mn,mx)
-			if not mn then
-			 mn,mx=0,1
-			elseif not mx then
-				mx,mn=mn,0
-			elseif mx<mn then
-				mn,mx=mx,mn
-			end
-			
-			local f=(self:_next()/32767+1)/2
-			return f*(mx-mn)+mn
-		end,
-		reset=function(self,ct,seed)
-			ct=ct or 0
-			self.seed=seed or self.seed
-			self.state=self.seed
-			self.count=0
-			for i=1,ct do
-				self:next()
-			end
-		end,
-		clone=function(self)
-			return rgen(self.seed,self.count)
-		end
-	}
-	for i=1,ct do ret:next() end
-	return ret
-end
 __gfx__
-0000000020000000c000000010000000100000000000000000000000007000000000000000000000000000000000000000000000000000000000000000000000
-0000000044211000ccc770001117700011111000000000000000000007000000000000000000000000000000000000000ccc9900000cc9900ccc9900cccc9900
-0070070094429a00cccc770011117700111177000000000007777777777777000000cc900000cc900000cc900000cc9000ccc999000ccc9900ccc9990cccc999
-00077000a94219a09cccccc0911111109111111000000000070000007000070000ccc99700ccc99700ccc99700ccc997000cc9970000cc97000cc99700cc9997
-00077000a942111177777777777777771111111100000000007000070000700000ccc99700ccc99700ccc99700ccc997000cc9970000cc97000cc99700cc9997
-00700700944211aa77ccc79777111797777777970000000000077777777700000000cc900000cc900000cc900000cc9000ccc999000ccc9900ccc9990cccc999
-0000000044209a9accc009991110099977107999000000000000777777700000000000000000000000000000000000000ccc9900000cc9900ccc9900cccc9900
-0000000020000000cc00000011000000110000000000000000000777770000000000000000000000000000000000000000000000000000000000000000000000
+0000000020000000c000000010000000100000000000000000000000007000000000000000000000000000000000000000099900000000000009990000000000
+0000000044211000ccc7700011177000111110000000000000000000070000000000000000000900000000000000090000019990000119900001999000011990
+0070070094429a00cccc770011117700111177000000000007777777777777000001190000017790000119000001779000911999901111990011199900119199
+00077000a94219a09cccccc091111110911111100000000007000000700007000111799001177979011177900117797900011997000111970001199700011197
+00077000a94211117777777777777777111111110000000000700007000070000111799001177979011177900117797990011997000111970011999700911197
+00700700944211aa77ccc79777111797777777970000000000077777777700000001190000017790000119000001779000119999009111999011199900111199
+0000000044209a9accc0099911100999771079990000000000007777777000000000000000000900000000000000090000019990000119900001999000011990
+0000000020000000cc00000011000000110000000000000000000777770000000000000000000000000000000000000000099900000000000009990000000000
 c0000000c0000000c0000000c0000000008e000000a9000000000077700000000077790000097700009777009007770000000000000000000000000000007700
-cd000000ccccc000ccccc000ccccc00000788e00007aa9000000000700000000700c97700007c770007c7770070c7790000cc77000000000000cc7700000c770
-cdcccc00cccc7700cccc7700cccc77007787778077a777a0000000070000000007c7c7779c7cc77907ccc7997cccc97700cccc7700000c7000cccc77000ccc77
-cdddccc09cccccc09cccccc09cccccc00e88887e09aaaa79000000070000000007c777797c7c779907cc79777ccc9777000ccc790000cc79000ccc7900ccc779
-cccddddd7777777777777777777777770e88887e09aaaa7900000007000000000c9c777907cc77999ccc79770ccc9777000ccc790000cc79000ccc7900ccc779
-cddcd5d577ccccc777c7c997779797977787778077a777a000000007000000007ccc77770cc7c7790c7cc79907ccc97700cccc7700000c7000cccc77000ccc77
-cddc5555ccc000007cc0000079c0099900788e00007aa9000000007770000000000c97700007c770007c7770070c7790000cc77000000000000cc7700000c770
+cd000000cc999000cc999000cc99900000788e00007aa900000000070000000070019770000717700071777007017790000cc77000000000000cc7700000c770
+cdcccc001c9999001c9999001c9999007787778077a777a000000007000000000717177791711779071117997111197700cccc7700000c7000cccc77000ccc77
+cdddccc091ccccc0977cccc0977cccc70e88887e09aaaa79000000070000000007177779717177990711797771119777000ccc790000cc79000ccc7900ccc779
+cccddddd7777777777777777777777770e88887e09aaaa79000000070000000001917779071177999111797701119777000ccc790000cc79000ccc7900ccc779
+cddcd5d57711177977119779771979797787778077a777a000000007000000007111777701171779017117990711197700cccc7700000c7000cccc77000ccc77
+cddc5555ccc000007cc000007cc0000000788e00007aa900000000777000000000019770000717700071777007017790000cc77000000000000cc7700000c770
 ccc00000cc000000cc000000cc000000008e000000a9000000007777777000000007790000977700900777000077770000000000000000000000000000007700
-000000000000000000000000000000000000aaaaaaa000000000eeeeeee000000000000000000000000000000000000000099900000000000009990009999900
-000000000000000000000000000000000000aaaa000a00000000eeee000e000000000000000000000000000000000000000c9990000cc990000c999000099990
-000000000000000000cccc00000000000aaaa77aaa0000000eeee77eee0000000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
-00000d00000ddd000ccddd00000222000a999777aaa000000e888777eee0000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
-00000d00000ddd000ccddd0000022200aa9979777aa00000ee8878777ee0000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
-000000000000000000cccc0000000000a999999777aaa000e888888777eee0000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
-00000000000000000000000000000000a99999777777aaa0e88888777777eee000000000000000000000000000000000000c9990000cc990000c999000099990
-00000000000000000000000000000000a9779797777777aae8778787777777ee0000000000000000000000000000000000099900000000000009990009999900
-00000000000000000000000000000000a9779797777777aae8778787777777ee00099000000aa000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000a99999777777aaa0e88888777777eee0091111900a7777a0000000000000000000000000000000000000000000000000
-00000000000000000000770000000000a999999777aaa000e888888777eee0000101101007077070000000000000000000000000000000000000000000000000
-00000c00000077000007cc0000007700aa9979777aa00000ee8878777ee0000091199119a77aa77a000000000000000000000000000000000000000000000000
-00000c00000077000007cc00000077000a999777aaa000000e888777eee0000091199119a77aa77a000000000000000000000000000000000000000000000000
-000000000000000000007700000000000aaaa77aaa0000000eeee77eee0000000101101007077070000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000aaaa000a00000000eeee000e0000091111900a7777a0000000000000000000000000000000000000000000000000
-000000000000000000000000000000000000aaaaaaa000000000eeeeeee0000000099000000aa000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000099900000000000009990009999900
+000000000000000000000000000000000000777700000000000000000000000000000000000000000000000000000000000c9990000cc990000c999000099990
+000000000000000000cccc000000000007777ee77000000000000000000000000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
+00000d00000ddd000ccddd000002220007666eee77000000000000000000000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
+00000d00000ddd000ccddd00000222007766e6eee7700000000000000000000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
+000000000000000000cccc00000000007666666eee77700000000000000000000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
+00000000000000000000000000000000766666eeeeee7770000000000000000000000000000000000000000000000000000c9990000cc990000c999000099990
+0000000000000000000000000000000076ee6e6eeeeeee7700000000000000000000000000000000000000000000000000099900000000000009990009999900
+0000000000000000000000000000000076ee6e6eeeeeee77000000000000000000099000000aa000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000766666eeeeee77700000000000000000091111900a7777a000000000000000000ccc9900000cc9900ccc9900cccc9900
+000000000000000000007700000000007666666eee77700000000000000000000101101007077070000000000000000000ccc999000ccc9900ccc9990cccc999
+000009000000790000079900000079007766e6eee7700000000000000000000091199119a77aa77a0000000000000000000cc9970000cc97000cc99700cc9997
+0000090000007900000799000000790007666eee77000000000000000000000091199119a77aa77a0000000000000000000cc9970000cc97000cc99700cc9997
+0000000000000000000077000000000007777ee77000000000000000000000000101101007077070000000000000000000ccc999000ccc9900ccc9990cccc999
+0000000000000000000000000000000000007777000000000000000000000000091111900a7777a000000000000000000ccc9900000cc9900ccc9900cccc9900
+000000000000000000000000000000000000000000000000000000000000000000099000000aa000000000000000000000000000000000000000000000000000
 00cccc00000ccc00c00ccc0000cccc00000ccc0000cccc00c00ccc00000000000000000000000000000000000000000000000000000000000000000000000000
 c001ccc0000c1cc00c01ccc0c001ccc0000c1cc000c1ccc00c01ccc0000000000000000000000000000000000000000000000000000000000000000000000000
 0c1c1cccc1c11cccc1111cc70c1c1cccc1c11ccc0c111cc7c1111cc7000000000000000000000000000000000000000000000000000000000000000000000000
