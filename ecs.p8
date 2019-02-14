@@ -2,7 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 component={
-	ent_id=-1,
+	entity=-1,
 	owner=nil,
 	name="base",
 }
@@ -44,24 +44,61 @@ function comp_list:new(comp_t)
 	assert(comp_t and
 		type(comp_t.new)=="function")
 
+	-- init free stack
+	-- todo: configurable size
+	--							dynamic resize
+	local free_stack={}
+	local size=128
+	for i=1,size do
+		free_stack[i]=size-i+1
+	end
+
 	self.__index=self
 	return setmetatable({
 			comp_t=comp_t,
-			comps_by_ent={},
+			entity_idx={},
+			data={},
+			size=size,
+			free_s=free_stack,
+			free_head=size,
 		},self)
 end
 
-function comp_list:add(ent_id,param)
-	assert(self.comps_by_ent[ent_id]==nil)
+function comp_list:add(entity,param)
+	assert(not self.entity_idx[entity])
+	
 	param=param or {}
-	param.ent_id=ent_id
+	param.entity=entity
 	param.owner=self
 	local c=self.comp_t:new(param)
-	self.comps_by_ent[ent_id]=c
+	
+	assert(self.free_head>0,"out of space")
+	
+	local idx=self.free_s[self.free_head]
+	self.free_head-=1
+	
+	self.entity_idx[entity]=idx
+	self.data[idx]=c
 end
 
-function comp_list:get()
-	return self.comps_by_ent
+function comp_list:del(entity)
+	assert(self.entity_idx[entity])
+	local idx=self.entity_idx[entity]
+	
+	-- todo: events or something
+	
+	self.data[idx]=nil
+	self.free_head+=1
+	self.free_s[self.free_head]=idx
+end
+
+function comp_list:get(entity)
+	local idx=self.entity_idx[entity]
+	if not idx then
+		return nil
+	else
+		return self.data[idx]
+	end
 end
 
 system={
@@ -92,26 +129,28 @@ function system:gather()
 		return
 	end
 	
-	self.entrefs={}
+	clr(self.entrefs)
 	
 	local ct=self.look[1]
-	for e,c in pairs(ecs.components[ct]:get()) do
-		local ref={entity=e}
-		ref[ct.name]=c
+	for ent,idx in pairs(ecs.components[ct].entity_idx) do
+		local ref={entity=ent}
+		ref[ct.name]=ecs.components[ct].data[idx]
 		add(self.entrefs,ref)
 	end
 	
 	local filter=function(refs,ct)
-		-- todo, inplace this
-		local ret={}
-		local comps=ecs.components[ct]:get()
-		for r in all(refs) do
-			if comps[r.entity] then
-				r[ct.name]=comps[r.entity]
-				add(ret,r)
+		local len=#refs
+		for i=1,len do
+			local r=refs[i]
+			local comp=ecs.components[ct]:get(r.entity)
+			if comp  then
+				r[ct.name]=comp
+			else
+				refs[i]=nil
 			end
 		end
-		return ret
+		compress(refs,len)
+		return refs
 	end
 	
 	for i=2,#self.look do
@@ -135,7 +174,7 @@ function draw_pos_sys:draw()
 end
 
 test_sys=system:new({
-	look={comp_pos,comp_vel}})
+	look={comp_pos,comp_vel,comp_col}})
 	
 function test_sys:update(dt)
 	for ref in all(self.entrefs) do
@@ -210,8 +249,10 @@ function _init()
 			{x=rnd(128),y=rnd(128)})
 		ecs_add_component(e,comp_vel)
 
+	if i%2==0 then
 		ecs_add_component(e,comp_col,
 			{col=flr(rnd(15))+1})
+		end
 	end
 end
 
@@ -250,3 +291,76 @@ function _draw()
 end
 
 
+-->8
+-- util
+
+-- slow but maintains order
+function compress_slow(a,n)
+	local n=n or #a
+	local i=1
+	while i<n do
+		local j=i
+		while a[j]==nil and j<n do
+			local k=j+1
+			while k<n and a[k]==nil do
+				k+=1
+			end
+			a[j]=a[k]
+			a[k]=nil
+			j=k
+		end
+		i+=1
+	end
+end
+
+function idel(a,i)
+	local n=#a
+	if (i<1 or i>n) return
+	a[i]=nil
+	
+	for j=i,n-1 do
+		a[j]=a[j+1]
+	end
+	a[n]=nil
+end
+
+function compress(a,n)
+	local n=n or #a
+	local h,t=1,n
+
+	-- wind tail back to first
+	-- non-nil entry in case len
+	-- is wrong
+	while a[t]==nil and t>h do
+		t-=1
+	end
+
+	while h<t do
+		if a[h]==nil then
+			a[h]=a[t]
+			a[t]=nil
+			while a[t]==nil and t>h do
+				t-=1
+			end
+		end
+		h+=1
+	end
+end
+
+function sort(a,lt,n)
+	local n=n or #a
+	local i=2
+	while i<=n do
+		local j=i
+		while j>1 and lt(a[j],a[j-1]) do
+			a[j],a[j-1]=a[j-1],a[j]
+			j-=1
+		end
+		i+=1
+	end
+end
+
+function clr(a,n)
+	local n=n or #a
+	for i=1,n do	a[i]=nil end
+end
