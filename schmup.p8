@@ -358,13 +358,15 @@ function seq_player_intro()
 
 	do_until(
 		function()
-			p.x=move_to(p.x,24,20*gm.dt)
-			p.y=move_to(p.y,64,20*gm.dt)
+			p.x=lerp(p.x,24,3*gm.dt)
+			p.y=lerp(p.y,64,3*gm.dt)
 			gm.star_speed=lerp(
 				gm.star_speed,0,2*gm.dt)
+				watch(p.x..","..p.y)
 		end,
 		function()
-			return p.x==24 and p.y==64
+			return approx(p.x,24,1)
+				and approx(p.y,64,1)
 				and gm.star_speed<1
 		end)
 	
@@ -646,6 +648,11 @@ function lerp(a,b,t)
 	return a+(b-a)*t
 end
 
+function approx(a,b,eps)
+	eps=eps or 0.0001
+	return abs(a-b)<=eps
+end
+
 function ilerp(a,b,v)
 	if (b==a) return 1
 	return (v-a)/(b-a)
@@ -659,14 +666,6 @@ function toggle(v,on,off)
 	else
 		return on
 	end
-end
-
-function unpack(t,from,to)
-	if (not t) return {}
-	from=from or 1
-	to=to or #t
-	if (from>to) return
-	return t[from],unpack(t,from+1,to)
 end
 
 function pow(x,a)
