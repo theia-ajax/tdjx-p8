@@ -1,11 +1,43 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+function clone(tbl)
+	local ret={}
+	for k,v in pairs(tbl) do
+		ret[k]=v
+	end
+	return ret
+end
+
 function _init()
 	plr=player:new({x=24,y=64})
-	bullets={}
-	stars={}
-	enemies={}
+	bullets=system:new("bullets")
+	stars=system:new("stars")
+	enemies=system:new("enemies")
+
+	colliders=system:new("colliders")
+	colliders.make=function(self,owner,param)
+		if (not param) return nil
+		param.owner=owner
+		return self:ins(
+			collider:new(clone(param)))
+	end
+	
+	colliders.ins=function(self,coll)
+		local l=coll:left()
+		local n=#colliders
+		local i=0
+		for i=1,n do
+			if l>=colliders[i]:right() then
+				ins(colliders,i,coll)
+				return coll,i
+			end
+		end
+		colliders[n+1]=coll
+		return coll,n+1
+	end
+	
+--	register_enemies()
 	
 	star_col={11,12,10,9,8}
 	star_col={5,6,7,5,6,7}
@@ -46,7 +78,7 @@ function _init()
 			f=0,height=16,targ=0,
 			bg=0x1.a5a5,fg=9
 		},
-		star_speed_impulse=20,
+		star_speed_impulse=12,
 		star_speed_hyper=750,
 		star_speed=10,
 		player=plr,
@@ -59,7 +91,9 @@ function _init()
 	--sequence(seq_player_intro)
 	gm.star_speed=gm.star_speed_impulse
 	
-	add_enemy(eyemonster,100,60)
+	for i=0,30 do
+		add_enemy(ufo,130+i*8,rnd(64)+31)
+	end
 end
 
 function is_dev() return peek(0x5f2d)~=0 end
@@ -74,7 +108,12 @@ function keypressed(key)
 		gm.player.gun_level-=1
 	elseif key=="h" then
 		sequence(seq_player_intro)
+	elseif key=="l" then
+		_logs={}
 	end
+	
+	gm.player.gun_level=mid(1,3,
+		gm.player.gun_level)
 end
 
 --[[function _update()
@@ -124,14 +163,43 @@ function update(dt)
 
 	plr:update(dt)
 	
+	enemies:pump_adds()
+	bullets:pump_adds()
+	colliders:pump_adds()
+	
 	foreach(bullets,
-		function(b) b:update(dt) end)
-		
+		function(b)
+			b:update(dt)
+			if band(b.flags,b.k.flag_del)~=0 then
+				--bullets:del(b)
+				b.on_del(b)
+				del(bullets,b)
+			end
+		end)
+	
 	foreach(enemies,
-		function(e) e:update(dt) end)
+		function(e)
+			e:update(dt)
+			if e.x<-128 then
+				enemies:del(e)
+			elseif not e.awake
+				and e.x<256
+			then
+				e:on_awake()
+			end
+		end)
+			
+	check_collisions()
+		
+	enemies:pump_dels()
+	bullets:pump_dels()
+	colliders:pump_dels()
 		
 	watch_stat(0)
 	watch_stat(1)
+	watch_stat(2)
+	watch(#colliders)
+--	watch("pos:"..gm.player.x..","..gm.player.y)
 end
 
 _stat_labels={
@@ -144,7 +212,7 @@ function watch_stat(s,label)
 	local lb=_stat_labels[s+1]
 	local label,scl=lb.l,lb.s
 	local sperc=band(stat(s)*scl,0xffff)
-	local col=11
+	local col=12
 	if sperc>=45 then
 		col=8
 	elseif sperc>=35 then
@@ -156,6 +224,13 @@ end
 function sequence(seq)
 	assert(type(seq)=="function")
 	add(sequences,cocreate(seq))
+end
+
+function defer(fn,sec)
+	sequence(function()
+		wait_sec(sec)
+		fn()
+	end)
 end
 
 function _draw()
@@ -186,7 +261,9 @@ function _draw()
 			
 			local px1,py1=px0+gm.star_speed/100,py0
 			
-			line(px0,py0,px1,py1,6)
+			local c=6
+			if (sz>35) c=5
+			line(px0,py0,px1,py1,c)
 		end
 	end
 	
@@ -194,13 +271,27 @@ function _draw()
 	foreach(enemies,function(e) e:draw() end)
 	foreach(bullets,function(b) b:draw() end)
 	
-	--spr(20,60,60)
+	draw_colliders()
+	
+	-- hud
+	
+	rectfill(31,-1,31+64,6,0)
+	rect(31,-1,31+64,6,7)
+	
+	local bg,fg=3,11
+	for i=0,plr.max_health-1 do
+		local x,y=33+i*2,1
+		local c=bg
+		if (i<plr.health) c=fg
+		line(x,y,x,y+3,c)
+	end
 	
 	letterbox(
 		gm.lbox.f*gm.lbox.height,
 		gm.lbox.bg,gm.lbox.fg)
 	
 	draw_watch()
+	draw_log()
 	
 	if is_dev() then
 		circ(stat(32),stat(33),1,11)
@@ -208,8 +299,8 @@ function _draw()
 end
 
 function add_enemy(etype,x,y)
-	return add(enemies,
-		etype:new({x=x,y=y}))
+	local ret=etype:new({x=x,y=y})
+	return enemies:add_now(ret)
 end
 
 function letterbox(h,bg,fg)
@@ -238,37 +329,108 @@ function centerx(msg)
 	return 64-#msg*2
 end
 
+-- class player
 player={
 	id=0,
 	x=24,y=64,
 	w=4,h=4,
 	dx=0,dy=0,
+	max_health=16,
+	health=16,
 	move_speed=48,
-	burst_ct=3,
-	burst_ivl=5,
 	guns={
 		{
 			shot_sp=8,
 			ship_sp=17,
-			burst_ct=1,
-			burst_ivl=0,
+			burst_ct=3,
+			burst_ivl=0.1,
+			fire=function(self)
+				fire_bullet(0,144,0,{
+					x=plr.x+3,y=plr.y+1,
+					sp=self.shot_sp,
+					t_life=1,
+					colldef={
+						layer=1,
+						ox=2,oy=0,
+						w=2,h=3
+					}
+				})
+			end,
 		},
 		{
 			shot_sp=12,
 			ship_sp=18,
 			burst_ct=2,
-			burst_ivl=12,
+			burst_ivl=12/60,
+			speed=144,
+			fire=function(self)
+				local bullet={
+					x=plr.x+3,--y=plr.y+1,
+					sp=self.shot_sp,
+					t_life=0.75,
+					colldef={
+ 					layer=1,
+ 					ox=0,oy=0,w=3,h=4
+ 				}
+				}
+				local top=merge(bullet,
+					{y=plr.y-2})
+				local bot=merge(bullet,
+					{y=plr.y+3})
+				fire_bullet(0,144,0,top)
+				fire_bullet(0,144,0,bot)
+			end
 		},
 		{
 			shot_sp=24,
 			ship_sp=19,
 			burst_ct=3,
-			burst_ivl=8,
+			burst_ivl=8/60,
+			speed=144,
+			fire=function(self)
+				local start,spacing=plr.y-3,4
+				local bullet={
+					x=plr.x+3,y=plr.y+1,
+					sp=self.shot_sp,
+					t_life=1,
+					colldef={
+ 					layer=1,
+ 					ox=0,oy=0,w=3,h=4
+ 				}
+				}
+				
+				local ang=8/360
+				for i=0,2 do
+					local delay=0.1
+					fire_bullet(ang+i*-ang,144,
+						0,
+						merge(bullet,{
+							y=start+spacing*i,
+						}))
+				end
+--[[				
+				for i=-5,5 do
+					local ang=i*5/360
+					
+					fire_bullet(ang,144,rnd(delay),clone(bullet))
+				end
+				]]
+			end
 		},
 	},
 	gun_level=1,
 	t_shot=0,
 	n_shot=0,
+	t_charge=0,
+	flash_ivl=0,
+	flash_pal={
+		{12,7},
+		{7,9},
+		{9,7},
+		{1,9},
+	},
+	charge_delay=0.25,
+	charge_time=0.75,
 	lock_input=false,
 }
 
@@ -292,7 +454,7 @@ function player:update(dt)
 	self.x+=self.dx*dt
 	self.y+=self.dy*dt
 	
-	if (self.t_shot>0) self.t_shot-=1
+	if (self.t_shot>0) self.t_shot-=dt
 	
 	local gun=self.guns[mid(self.gun_level,1,#self.guns)]
 	local burst_ct=gun.burst_ct
@@ -300,17 +462,63 @@ function player:update(dt)
 	
 	if not lock and btn(4,self.id)
 	then
-		if self.n_shot<burst_ct and
-			self.t_shot<=0
+		if (burst_ct<=0 or
+			   self.n_shot<burst_ct)
 		then
-			make_bullet(plr.x+3,plr.y+1,gun.shot_sp)
-			self.n_shot+=1
-			self.t_shot=burst_ivl
-		end
+ 		if self.t_shot<=0	then
+ 			gun:fire()
+ 			self.n_shot+=1
+ 			self.t_shot=burst_ivl
+ 		end
+ 	else
+ 		-- if holding fire after
+ 		-- burst has finished
+ 		-- increment charge time
+ 		-- if charge time passes
+ 		-- delay threshold start
+ 		-- 'charging' flash interval
+ 		-- if charge time passes
+ 		-- delay+full charge time
+ 		-- start the 'charged' flash
+ 		self.t_charge+=dt
+ 		if self.t_charge>=self.charge_delay+self.charge_time then
+ 			self.flash_ivl=1/8
+ 		elseif self.t_charge>=self.charge_delay then
+ 			self.flash_ivl=1/4
+ 		end
+ 	end
 	else
+		-- if was charged, on release
+		-- then fire the charged shot
+		if self.t_charge>=self.charge_delay+self.charge_time then
+			-- charge shot
+			fire_bullet(0,144/2,0,
+				{
+					x=plr.x+3,y=plr.y+1,
+					--sp=flr(rnd(3))*2+96,
+					sp=98,
+					w=8,h=8,
+					sw=2,sh=2,
+					anim_f=1,
+					t_life=10,
+					pal_sets={
+						{{5,0},{6,9},{7,7}},
+						{{5,9},{6,7},{7,0}},
+						{{5,7},{6,0},{7,9}},
+					},
+					pal_s=20,
+				})
+		end
+	
 		self.n_shot=0
 		self.t_shot=0
+		self.t_charge=0
+		self.flash_ivl=0
 	end
+	self.t_charge=mid(self.t_charge,
+		0,self.charge_delay+self.charge_time)
+	
+	--watch("charge:"..self.t_charge)
 end
 
 function player:draw()
@@ -339,10 +547,23 @@ function player:draw()
  	fillp()
  end
  
+ if self.flash_ivl>0
+ 	and blink(self.flash_ivl)
+ then
+ 	for p in all(self.flash_pal) do
+ 		pal(p[1],p[2])
+ 	end
+ end
+ 
 	local gun=self.guns[mid(self.gun_level,1,#self.guns)]
 	spr(gun.ship_sp,self.x-self.w,self.y-self.h)
 	
 	pal()
+	
+	if self.t_charge>self.charge_delay then
+		local s=self.t_charge/(self.charge_time+self.charge_delay)
+		spr_scale(98,plr.x+3,plr.y+1,s,2,2)
+	end
 	
 	spr(48+(t()*16)%4,self.x-self.w-6,self.y-self.h) 	
 
@@ -415,10 +636,30 @@ function seq_player_intro()
 	p.lock_input=false
 end
 
+-- class bullet
 bullet={
+	k={
+		flag_del=1
+	},
 	x=0,y=0,
+	w=4,h=4,
 	dx=0,dy=0,
-	t0=0
+	sw=1,sh=1,
+	anim_f=4,
+	anim_s=15,
+	t0=0,
+	t_life=2,
+	flags=0,
+	coll=nil,
+	on_collide=function(self,other)
+		self.flags=bullet.k.flag_del
+	end,
+	on_del=function(self)
+		if self.coll then
+			colliders:del_now(self.coll)
+			self.coll=nil
+		end
+	end
 }
 
 function bullet:new(b)
@@ -429,17 +670,50 @@ end
 
 function bullet:update(dt)
 	self.x+=self.dx*dt
+	self.y+=self.dy*dt
 	self.t0+=dt
+	self.t_life-=dt
+	if self.t_life<=0 then
+		self.flags=self.k.flag_del
+	end
 end
 
 function bullet:draw()
-	spr(self.sp+(self.t0*15)%4,self.x-4,self.y-4)
+	if self.pal_sets then
+		local pi=flr(self.t0*self.pal_s)%#self.pal_sets
+		local ps=self.pal_sets[pi+1]
+		for p in all(ps) do
+			pal(p[1],p[2])
+		end
+	end
+
+	local frame=self.sp+
+		(self.t0*self.anim_s)%self.anim_f
+	spr(frame,
+		self.x-self.w,self.y-self.h,
+		self.sw,self.sh)
+	
+	pal()
 end
 
-function make_bullet(x,y,sp)
-	sfx(gm.player.gun_level-1)
-	return add(bullets,bullet:new(
-		{x=x,y=y,dx=144,sp=sp}))
+bid=0
+function fire_bullet(ang,speed,delay,param)
+	local make=function(ang,speed,param)
+		param.dx=cos(ang)*speed
+		param.dy=sin(ang)*speed
+		param.bid=bid
+		bid+=1
+		local blt=bullet:new(param)
+		bullets:add_now(blt)
+		if blt.colldef then
+			blt.coll=colliders:make(blt,blt.colldef)
+		end
+	end
+	defer(
+		function()
+			make(ang,speed,param)
+		end,
+		delay)
 end
 
 powerup={
@@ -457,121 +731,226 @@ end
 function powerup:update(dt)
 	
 end
--->8
-function include_helper(to,from,seen)
-	if from==nil then
-		return to
-	elseif type(from)~='table' then
-		return from
-	elseif seen[from] then
-		return seen[from]
+
+-- collision detection
+l_masks={}
+l_masks[1]=0b1111111111111110
+l_masks[2]=0b1111111111111101
+
+collider={
+	layer=0,
+	ox=0,oy=0, -- offset
+	w=0,h=0, -- half width/height
+	owner=nil, -- offset from this
+												-- owner should have
+												-- x,y
+}
+
+function collider:new(param)
+	self.__index=self
+	return setmetatable(
+		param or {},self)
+end
+
+function collider:left()
+	local cx=self:world()
+	return cx-self.w
+end
+
+function collider:right()
+	local cx=self:world()
+	return cx+self.w-1
+end
+
+function collider:top()
+	local _,cy=self:world()
+	return cy-self.h
+end
+
+function collider:bottom()
+	local _,cy=self:world()
+	return cy+self.h-1
+end
+
+function collider:world()
+	if self.owner then
+		return self.ox+self.owner.x,
+			self.oy+self.owner.y
+	else
+		return self.ox,self.oy
 	end
-	
-	seen[from]=to
-	for k,v in pairs(from) do
-		k=include_helper({},k,seen)
-		if to[k]==nil then
-			to[k]=include_helper({},v,seen)
+end
+
+function layer_check(l1,l2)
+	if l1==0 or l2==0 then
+		return true
+	else
+		local mask=l_masks[l1] or 0xffff
+		return band(mask,shl(1,l2-1))~=0
+	end
+end
+
+function collider:intersect(other)
+	return self:left()<=other:right()
+		and self:right()>=other:left()
+		and self:top()<=other:bottom()
+		and self:bottom()>=other:top()
+end
+
+function check_collisions()
+	--[[sort(colliders,
+		function(a,b)
+			return a:left()<b:left()
+		end)]]
+		
+	-- sort
+	local n=#colliders
+	for xx=1,3 do
+ 	for i=1,n-1 do
+ 		if colliders[i]:left()>colliders[i+1]:left() then
+ 			colliders[i],colliders[i+1]=
+ 				colliders[i+1],colliders[i]
+ 		end
+ 	end
+ end
+		
+	local cmpct=0
+
+	local n=#colliders
+	for i=1,n-1 do
+		local j=i+1
+		local a=colliders[i]
+		local r=a:right()
+		while j<=n
+			and r>=colliders[j]:left()
+		do
+			local b=colliders[j]
+			if layer_check(a.layer,b.layer) then
+				cmpct+=1
+ 			if a:intersect(b) then
+ 				if a.owner and a.owner.on_collide then
+ 					a.owner:on_collide(b)
+ 				end
+ 				if b.owner and b.owner.on_collide then
+ 					b.owner:on_collide(a)
+ 				end
+ 			end
+ 		end
+ 		j+=1
+ 		
 		end
 	end
-	return to
-end
-
-function include(class,other)
-	return include_helper(class,other,{})
-end
-
-local function clone(other)
-	return setmetatable(include({},other),
-		getmetatable(other))
-end
-
-local function new(class)
-	class=class or {}
-	local inc=class.__includes or {}
-	if (getmetatable(inc)) inc={inc}
 	
-	for other in all(inc) do
-		include(class,other)
+	watch("total comp:"..cmpct)
+end
+
+function draw_colliders()
+	for c in all(colliders) do
+		local cx,cy=c:world()
+		rect(c:left(),c:top(),
+			c:right(),c:bottom(),11)
+		pset(cx,cy,8)
 	end
-	
-	class.__index=class
-	class.init=class.init or class[1] or function() end
-	class.include=class.include or include
-	class.clone=class.clone or clone
-	
-	return setmetatable(class,{
-		__call=function(c,...)
-			local o=setmetatable({},c)
-			o:init(...)
-			return o
-		end})
 end
 
-class=setmetatable(
-	{new=new,include=include,clone=clone},
-	{__call=function(_,...) return new(...) end})
--->8
+system={
+	name="base",
+	verify=true,
+}
 
--->8
--- xorshift16 sort of
-function rgen(seed,ct)
-	seed=seed or 1
-	ct=ct or 0
-	local ret={
-		seed=seed,
-		sx=seed,
-		count=0,
-		_next=function(self)
-			self.count+=1
-			self.sx=bxor(self.sx,shl(self.sx,7))
-			self.sx=bxor(self.sx,shr(self.sx,9))
-			self.sx=bxor(self.sx,shl(self.sx,8))
-			return self.sx
-		end,
-		next=function(self,mn,mx)
-			if not mn then
-			 mn,mx=0,1
-			elseif not mx then
-				mx,mn=mn,0
-			elseif mx<mn then
-				mn,mx=mx,mn
-			end
-			
-			local f=(self:_next()/32767+1)/2
-			return f*(mx-mn)+mn
-		end,
-		reset=function(self,ct,seed)
-			ct=ct or 0
-			self.seed=seed or self.seed
-			self.state=self.seed
-			self.count=0
-			for i=1,ct do
-				self:next()
-			end
-		end,
-		clone=function(self)
-			return rgen(self.seed,self.count)
-		end
-	}
-	for i=1,ct do ret:next() end
+function system:new(name)
+	self.__index=self
+	return setmetatable(
+		{name=name,rem_q={},add_q={}},
+		self)
+end
+
+function system:add_now(elem)
+	local ret=add(self,elem)
+	if ret.on_add then
+		ret:on_add()
+	end
 	return ret
 end
+
+function system:del_now(elem)
+	if elem then
+		if elem.on_del then
+			elem:on_del()
+		end
+		del(self,elem)
+	end
+end
+
+function system:contains(elem)
+	local len=#self
+	for i=1,len do
+		if self[i]==elem then
+			return true
+		end
+	end
+	return false
+end
+
+function system:add(elem)
+	assert(false,"use something else")
+	if verify then
+		assert(not self:contains(elem))
+	end
+	add(self.add_q,elem)
+end
+
+function system:del(elem)
+	if (elem) add(self.rem_q,elem)
+end
+
+function system:pump_adds()
+	local len=#self.add_q
+	for i=1,len do
+		local o=self.add_q[i]
+		add(self,o)
+		if (o.on_add) o:on_add()
+		self.rem_q[i]=nil
+	end
+end
+
+function system:pump_dels()
+	local len=#self.rem_q
+
+	for i=1,len do
+		local o=self.rem_q[i]
+		
+		self.rem_q[i]=nil
+		if (o.on_del) o:on_del()
+		del(self,o)
+	end
+end
+
 -->8
 -- enemies
 
 enemy={
-	const={
-		k_state_idle=0,
-		k_state_active=1,
+	k={
+		s_idle=0,
+		s_active=1,
 	},
-
+	awake=false,
 	x=0,y=0,
 	dx=0,dy=0,
 	w=8,h=8, --half width/height
 	state=0,
 	sp=0,
 	sw=1,sh=1,
+	max_health=10,
+	health=10,
+	on_collide=function(self,other)
+		if self.health>0 then
+ 		self.health-=1
+ 		if self.health<=0 then
+ 			enemies:del(self)
+ 		end
+		end
+	end
 }
 
 function enemy:new(e)
@@ -579,9 +958,34 @@ function enemy:new(e)
 	return setmetatable(e or {},self)
 end
 
+function enemy:on_add()
+	self.health=self.max_health	
+end
+
+function enemy:on_del()
+	colliders:del(self.coll)
+end
+
+-- called when enemy gets in
+-- range to be "live"
+-- add collider and stuff
+function enemy:on_awake()
+	self.awake=true
+	self.coll=colliders:make(self,self.colldef)
+end
+
 function enemy:update(dt)
-	if self.state==enemy.const.k_state_idle then
+	if self.state==enemy.k.s_idle then
 		self.x-=gm.move_speed*dt
+		
+		if self.x<120 then
+			self.state=enemy.k.s_active
+		end
+		
+	elseif self.state==enemy.k.s_active then
+		local mv=gm.move_speed
+		mv+=25
+		self.x-=mv*dt
 	end
 end
 
@@ -593,20 +997,40 @@ function enemy:draw()
 	end
 end
 
-eyemonster=enemy:new({sp=36,sw=2,sh=2})
+eyemonster=enemy:new(
+	{sp=36,sw=2,sh=2,
+		colldef={layer=0,w=8,h=8}})
+		
+
+
+ufo=enemy:new(
+	{sp=71,sw=1,sh=1,w=4,h=4,
+		max_health=4,
+		colldef={layer=0,w=4,h=4}})
+
 
 -->8
--- todo/notes
+function sort(a,lt,n)
+	local n=n or #a
+	local i=2
+	while i<=n do
+		local j=i
+		while j>1 and lt(a[j-1],a[j]) do
+			a[j],a[j-1]=a[j-1],a[j]
+			j-=1
+		end
+		i+=1
+	end
+end
 
--- buckets:
--- 	entities
---		drawables
---		players				
---		enemies
---		bullets
--->8
+function ins(arr,idx,elem)
+	local n=#arr
+	for i=n+1,idx+1,-1 do
+		arr[i]=arr[i-1]
+	end
+	arr[idx]=elem
+end
 
--->8
 function input_xy(p)
 	p=p or 0
 	local x,y=0,0
@@ -658,6 +1082,25 @@ function ilerp(a,b,v)
 	return (v-a)/(b-a)
 end
 
+function clone(tbl)
+	local ret={}
+	for k,v in pairs(tbl) do
+		ret[k]=v
+	end
+	return ret
+end
+
+function merge(t1,t2)
+	local out={}
+	for k,v in pairs(t1) do
+		out[k]=v
+	end
+	for k,v in pairs(t2) do
+		out[k]=v
+	end
+	return out
+end
+
 function toggle(v,on,off)
 	on=on or true
 	off=off or false
@@ -687,16 +1130,44 @@ end
 _watches={}
 
 function watch(msg,col)
-	add(_watches,{msg=msg,col=col or 11})
+	add(_watches,{msg=tostr(msg),
+		col=col or 12})
 end
 
 function draw_watch(col)
-	col=col or 11
+	col=col or 12
 	local n=#_watches
 	for i=0,n-1 do
 		local w=_watches[i+1]
 		print(w.msg,0,i*6,w.col)
 	end
+end
+
+_logs={}
+
+function log(msg,col)
+	add(_logs,{msg=tostr(msg),
+		col=col or 6})
+	if #_logs>20 then
+		for i=1,20 do
+			_logs[i]=_logs[i+1]
+		end
+		_logs[21]=nil
+	end
+end
+
+function draw_log()
+	for i=1,#_logs do
+		local l=_logs[i]
+		print(l.msg,
+			127-#l.msg*4,(i-1)*6,l.col)
+	end
+end
+
+function halt(msg)
+	cls()
+	log("halt:"..tostr(msg),8)
+	stop()
 end
 
 function move_to(from,to,delta)
@@ -769,6 +1240,82 @@ function do_until(fn,pred)
 		yield()
 	end
 end
+
+-- xorshift16 sort of
+function rgen(seed,ct)
+	seed=seed or 1
+	ct=ct or 0
+	local ret={
+		seed=seed,
+		sx=seed,
+		count=0,
+		_next=function(self)
+			self.count+=1
+			self.sx=bxor(self.sx,shl(self.sx,7))
+			self.sx=bxor(self.sx,shr(self.sx,9))
+			self.sx=bxor(self.sx,shl(self.sx,8))
+			return self.sx
+		end,
+		next=function(self,mn,mx)
+			if not mn then
+			 mn,mx=0,1
+			elseif not mx then
+				mx,mn=mn,0
+			elseif mx<mn then
+				mn,mx=mx,mn
+			end
+			
+			local f=(self:_next()/32767+1)/2
+			return f*(mx-mn)+mn
+		end,
+		reset=function(self,ct,seed)
+			ct=ct or 0
+			self.seed=seed or self.seed
+			self.state=self.seed
+			self.count=0
+			for i=1,ct do
+				self:next()
+			end
+		end,
+		clone=function(self)
+			return rgen(self.seed,self.count)
+		end
+	}
+	for i=1,ct do ret:next() end
+	return ret
+end
+
+-- sp: sprite in sheet
+-- cx: center x pixel coord
+-- cy: center y pixel coord
+-- scale: 0 invis, 1 normal, 2 double
+-- sw: sprite width (def: 1)
+-- sh: sprite height (def: 1)
+
+function
+spr_scale(sp,cx,cy,scale,sw,sh)
+	sw,sh=sw or 1,sh or 1
+
+	if (scale<=0) return
+	
+	local dw,dh=sw*8*scale,sh*8*scale
+	local dx,dy=cx-dw/2,cy-dh/2
+	local sx,sy=sp%16*8,flr(sp/16)*8
+	
+	sspr(sx,sy,sw*8,sh*8,
+		dx,dy,dw,dh)
+end
+
+
+-->8
+-- todo/notes
+
+-- buckets:
+-- 	entities
+--		drawables
+--		players				
+--		enemies
+--		bullets
 __gfx__
 0000000020000000c000000010000000100000000000000000000000007000000000000000000000000000000000000000099900000000000009990000000000
 0000000044211000ccc7700011177000111110000000000000000000070000000000000000000900000000000000090000019990000119900001999000011990
@@ -786,13 +1333,13 @@ cccddddd7777777777777777777777770e88887e09aaaa7900000007000000000191777907117799
 cddcd5d57711177977119779771979797787778077a777a000000007000000007111777701171779017117990711197700cccc7700000c7000cccc77000ccc77
 cddc5555ccc000007cc000007cc0000000788e00007aa900000000777000000000019770000717700071777007017790000cc77000000000000cc7700000c770
 ccc00000cc000000cc000000cc000000008e000000a9000000007777777000000007790000977700900777000077770000000000000000000000000000007700
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000099900000000000009990009999900
-000000000000000000000000000000000000777700000000000000000000000000000000000000000000000000000000000c9990000cc990000c999000099990
-000000000000000000cccc000000000007777ee77000000000000000000000000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
-00000d00000ddd000ccddd000002220007666eee77000000000000000000000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
-00000d00000ddd000ccddd00000222007766e6eee7700000000000000000000000000000000000000000000000000000000cc9970000cc97000cc9970cc99997
-000000000000000000cccc00000000007666666eee77700000000000000000000000000000000000000000000000000000ccc999000ccc9900ccc99900cc9999
-00000000000000000000000000000000766666eeeeee7770000000000000000000000000000000000000000000000000000c9990000cc990000c999000099990
+00000000000000000000000000000000000000000000000000000000000000000222220009999900033333000000000000099900000000000009990009999900
+0000000000000000000000000000000000007777000000000000000000000000228888209aaaaa903bbbbb3000000000000c9990000cc990000c999000099990
+000000000000000000cccc000000000007777ee7700000000000000000000000288888209aaaaa903bb333300000000000ccc999000ccc9900ccc99900cc9999
+00000d00000ddd000ccddd000002220007666eee770000000000000000000000288222209a9a9a903bb3333000000000000cc9970000cc97000cc9970cc99997
+00000d00000ddd000ccddd00000222007766e6eee77000000000000000000000288882209a9a9a903bb3333000000000000cc9970000cc97000cc9970cc99997
+000000000000000000cccc00000000007666666eee7770000000000000000000288222209a999a903bbbbb300000000000ccc999000ccc9900ccc99900cc9999
+00000000000000000000000000000000766666eeeeee7770000000000000000002222200099999000333330000000000000c9990000cc990000c999000099990
 0000000000000000000000000000000076ee6e6eeeeeee7700000000000000000000000000000000000000000000000000099900000000000009990009999900
 0000000000000000000000000000000076ee6e6eeeeeee77000000000000000000099000000aa000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000766666eeeeee77700000000000000000091111900a7777a000000000000000000ccc9900000cc9900ccc9900cccc9900
@@ -803,12 +1350,12 @@ ccc00000cc000000cc000000cc000000008e000000a9000000007777777000000007790000977700
 0000000000000000000000000000000000007777000000000000000000000000091111900a7777a000000000000000000ccc9900000cc9900ccc9900cccc9900
 000000000000000000000000000000000000000000000000000000000000000000099000000aa000000000000000000000000000000000000000000000000000
 00cccc00000ccc00c00ccc0000cccc00000ccc0000cccc00c00ccc00000000000000000000000000000000000000000000000000000000000000000000000000
-c001ccc0000c1cc00c01ccc0c001ccc0000c1cc000c1ccc00c01ccc0000000000000000000000000000000000000000000000000000000000000000000000000
-0c1c1cccc1c11cccc1111cc70c1c1cccc1c11ccc0c111cc7c1111cc7000000000000000000000000000000000000000000000000000000000000000000000000
-0c1cccc7c1c1ccc7c111cc770c1cccc7c1c1ccc70c11cc77c111cc77000000000000000000000000000000000000000000000000000000000000000000000000
-01c1ccc70c11ccc70111cc7701c1ccc70c11ccc7c111cc770111cc77000000000000000000000000000000000000000000000000000000000000000000000000
-c111cccc011c1ccc0c111cc7c111cccc011c1ccc01c11cc70c111cc7000000000000000000000000000000000000000000000000000000000000000000000000
-0001ccc0000c1cc00c01ccc00001ccc0000c1cc000c1ccc00c01ccc0000000000000000000000000000000000000000000000000000000000000000000000000
+c001ccc0000c1cc00c01ccc0c001ccc0000c1cc000c1ccc00c01ccc0000bb0000000000000000000000000000000000000000000000000000000000000000000
+0c1c1cccc1c11cccc1111cc70c1c1cccc1c11ccc0c111cc7c1111cc70033bb000000000000000000000000000000000000000000000000000000000000000000
+0c1cccc7c1c1ccc7c111cc770c1cccc7c1c1ccc70c11cc77c111cc7703333bb00000000000000000000000000000000000000000000000000000000000000000
+01c1ccc70c11ccc70111cc7701c1ccc70c11ccc7c111cc770111cc77566666660000000000000000000000000000000000000000000000000000000000000000
+c111cccc011c1ccc0c111cc7c111cccc011c1ccc01c11cc70c111cc7056666600000000000000000000000000000000000000000000000000000000000000000
+0001ccc0000c1cc00c01ccc00001ccc0000c1cc000c1ccc00c01ccc0005555000000000000000000000000000000000000000000000000000000000000000000
 000ccc0000cccc0000cccc00000ccc0000cccc00000ccc0000cccc00000000000000000000000000000000000000000000000000000000000000000000000000
 00777700000777007007770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 70017770000717700701777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -818,6 +1365,22 @@ c111cccc011c1ccc0c111cc7c111cccc011c1ccc01c11cc70c111cc7000000000000000000000000
 71117777011717770711177900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00017770000717700701777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00077700007777000077770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+70000000000000070000000770000000500000055000000500000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000005500000000000700660070000060000066000006000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00705606606507000050050550500500000056077065000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00067067760760000006006666006000000760055006700000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00576077770675000700777777770070005657066075650000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00600667766006000050755555570500006075666657060000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00067655556760000006756666576000000006677660000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+05677755557776507656756776576567567566777766576500000000000000000000000000000000000000000000000000000000000000000000000000000000
+05677755557776507656756776576567567566777766576500000000000000000000000000000000000000000000000000000000000000000000000000000000
+00067655556760000006756666576000000006677660000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00600667766006000050755555570500006075666657060000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00576077770675000700777777770070005657066075650000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00067067760760000006006666006000000760055006700000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00705606606507000050050550500500000056077065000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000005500000000000700660070000060000066000006000000000000000000000000000000000000000000000000000000000000000000000000000000000
+70000000000000070000000770000000500000055000000500000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100003405034050270002a0002b000120000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000100002205022050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

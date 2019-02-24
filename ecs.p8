@@ -6,18 +6,19 @@ function _init()
 	ecs.systems[2]=draw_pos_sys
 	
 	for i=1,100 do
+		local z=flr(rnd(3))
 		local e=ecs:make_entity({
 			components={
 				{
 					comp_t=comp_pos,
-					data={x=rnd(128),y=rnd(128)}
+					data={x=rnd(128),y=rnd(128),z=z}
 				},
 				{
 					comp_t=comp_vel
 				},
 				{
 					comp_t=comp_col,
-					data={col=flr(rnd(15))+1}
+					data={col=z+5}
 				},
 			}
 		})
@@ -159,7 +160,7 @@ function sort(a,lt,n)
 	local i=2
 	while i<=n do
 		local j=i
-		while j>1 and lt(a[j],a[j-1]) do
+		while j>1 and lt(a[j-1],a[j]) do
 			a[j],a[j-1]=a[j-1],a[j]
 			j-=1
 		end
@@ -307,9 +308,26 @@ function system:new(sys)
 		end
 	end
 	
+	for l in all(sys.look) do
+		sys.look[l]=true
+	end
+	
 	self.__index=self
 	return setmetatable(
 		sys,self)
+end
+
+function system:dirty_entity(entity)
+	local match=true
+	for l in all(self.look) do
+		if not ecs.components[ct]:get(entity) then
+			match=false
+			break
+		end
+	end
+	
+	if not match then
+		
 end
 
 function system:gather(ecs)
@@ -392,14 +410,9 @@ function ecs:update(dt)
 		for ct,cl in pairs(self.components) do
 			if cl:del(entity) then
 				for sys in all(self.systems) do
-					if not sys.dirty then
- 					for l in all(sys.look) do
- 						if l==ct then
- 							sys.dirty=true
- 							break
- 						end
- 					end
- 				end
+					if sys.look[ct] then
+						sys.dirty=true
+					end
 				end
 			end
 		end
@@ -447,7 +460,7 @@ end
 -->8
 comp_pos=component:new({
 	name="pos",
-	x=0,y=0,
+	x=0,y=0,z=0,
 })
 
 function comp_pos:new(p)
@@ -476,9 +489,15 @@ draw_pos_sys=system:new({
 	look={comp_pos,comp_col}})
 	
 function draw_pos_sys:draw()
+	sort(self.entrefs,
+		function(a,b)
+			return a.pos.z<b.pos.z
+		end)
+
 	for ref in all(self.entrefs) do
-		pset(ref.pos.x,
+		circfill(ref.pos.x,
 			ref.pos.y,
+			4,
 			ref.col.col)
 	end
 end
