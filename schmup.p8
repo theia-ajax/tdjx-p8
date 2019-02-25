@@ -88,11 +88,11 @@ function _init()
 	poke(0x5f2d,1)
 	
 	sequences={}
-	--sequence(seq_player_intro)
+
 	gm.star_speed=gm.star_speed_impulse
 	
 	for i=0,30 do
-		add_enemy(ufo,130+i*8,rnd(64)+31)
+		add_enemy(ufo,130+i*24,rnd(64)+31)
 	end
 end
 
@@ -107,7 +107,7 @@ function keypressed(key)
 	elseif key=="-" then
 		gm.player.gun_level-=1
 	elseif key=="h" then
-		sequence(seq_player_intro)
+		sequence(seq_hyper_drive)
 	elseif key=="l" then
 		_logs={}
 	end
@@ -320,8 +320,8 @@ function letterbox(h,bg,fg)
 		rectfill(0,129-h,127,128,bg)
 		line(0,128-h,127,128-h,fg)
 		local m="please relax"
-		print(m,centerx(m),130-h+8,7)
-		spr(6,92,132-h,2,2)
+		print(m,56-#m*2,130-h+8,7)
+		spr(6,90,132-h,2,2)
 	end
 end
 
@@ -350,7 +350,7 @@ player={
 					sp=self.shot_sp,
 					t_life=1,
 					colldef={
-						layer=1,
+						layer=3,
 						ox=2,oy=0,
 						w=2,h=3
 					}
@@ -369,7 +369,7 @@ player={
 					sp=self.shot_sp,
 					t_life=0.75,
 					colldef={
- 					layer=1,
+ 					layer=3,
  					ox=0,oy=0,w=3,h=4
  				}
 				}
@@ -394,7 +394,7 @@ player={
 					sp=self.shot_sp,
 					t_life=1,
 					colldef={
- 					layer=1,
+ 					layer=3,
  					ox=0,oy=0,w=3,h=4
  				}
 				}
@@ -569,7 +569,13 @@ function player:draw()
 
 end
 
-function seq_player_intro()
+function seq_hyper_drive()
+	if gm.hyper_lock then
+		return
+	end
+	
+	gm.hyper_lock=true
+
 	gm.lbox.targ=0
 
 	p=gm.player
@@ -634,6 +640,8 @@ function seq_player_intro()
 	p.dx=0
 	
 	p.lock_input=false
+	
+	gm.hyper_lock=false
 end
 
 -- class bullet
@@ -651,6 +659,7 @@ bullet={
 	t_life=2,
 	flags=0,
 	coll=nil,
+	damage=1,
 	on_collide=function(self,other)
 		self.flags=bullet.k.flag_del
 	end,
@@ -732,10 +741,18 @@ function powerup:update(dt)
 	
 end
 
+-- layers
+-- 1: player
+-- 2: enemy
+-- 3: player article
+-- 4: enemy article
+
 -- collision detection
 l_masks={}
-l_masks[1]=0b1111111111111110
-l_masks[2]=0b1111111111111101
+l_masks[1]=0b0000000000001010
+l_masks[2]=0b0000000000000101
+l_masks[3]=0b0000000000000010
+l_masks[4]=0b0000000000000001
 
 collider={
 	layer=0,
@@ -943,14 +960,8 @@ enemy={
 	sw=1,sh=1,
 	max_health=10,
 	health=10,
-	on_collide=function(self,other)
-		if self.health>0 then
- 		self.health-=1
- 		if self.health<=0 then
- 			enemies:del(self)
- 		end
-		end
-	end
+	flash_dur=0.3,
+	t_flash=0
 }
 
 function enemy:new(e)
@@ -964,6 +975,23 @@ end
 
 function enemy:on_del()
 	colliders:del(self.coll)
+end
+
+function enemy:on_collide(other)
+	local hit=other.owner
+	if hit and hit.damage 
+		and self.health>0
+	then
+		self:on_damage(hit)
+	end
+end
+
+function enemy:on_damage(source)
+	self.health-=1
+	self.t_flash=self.flash_dur
+	if self.health<=0 then
+		enemies:del(self)
+	end
 end
 
 -- called when enemy gets in
@@ -999,16 +1027,24 @@ end
 
 eyemonster=enemy:new(
 	{sp=36,sw=2,sh=2,
-		colldef={layer=0,w=8,h=8}})
+		colldef={layer=2,w=8,h=8}})
 		
 
 
 ufo=enemy:new(
 	{sp=71,sw=1,sh=1,w=4,h=4,
-		max_health=4,
-		colldef={layer=0,w=4,h=4}})
+		max_health=3,
+		colldef={layer=2,w=4,h=4}})
 
-
+function ufo:update(dt)
+	if self.state==enemy.k.s_idle
+	then
+		enemy.update(self,dt)
+	else
+		local tx,ty=gm.player.x,gm.player.y
+		
+	end
+end
 -->8
 function sort(a,lt,n)
 	local n=n or #a
@@ -1316,6 +1352,32 @@ end
 --		players				
 --		enemies
 --		bullets
+-->8
+-- state machine tinkering...
+
+-- states:
+--		action (code that runs)
+--		transitions:
+--			vars to check
+--			state to transition to
+
+fsm={
+	vars={},
+	states={},
+	transitions={
+		
+	}
+}
+
+state={
+	tick=
+	function(self,dt)
+		-- code to do stuff
+ end,
+	transitions={
+		
+	}
+}
 __gfx__
 0000000020000000c000000010000000100000000000000000000000007000000000000000000000000000000000000000099900000000000009990000000000
 0000000044211000ccc7700011177000111110000000000000000000070000000000000000000900000000000000090000019990000119900001999000011990
