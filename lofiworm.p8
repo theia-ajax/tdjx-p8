@@ -2,6 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 function _init()
+	k_high_scores=5
+
 	cartdata("tdjx_worm_01")
 		
 	game={
@@ -9,7 +11,8 @@ function _init()
 		scores=load_scores(),
 		high_score=0,
 		state_name=nil,
-		state=nil
+		state=nil,
+		pause=false,
 	}
 	
 	game_states={
@@ -25,7 +28,22 @@ function _init()
 		}
 	}
 
+	sequences={}
+	
+	--[[fade_in(function()
+		sequence(function()
+			wait_sec(0.5)
+		end,fade_out)
+	end)]]
+
 	set_game_state("menu")
+end
+
+function sequence(fn,on_finish)
+	add(sequences,{
+		cr=cocreate(fn),
+		on_finish=on_finish
+	})
 end
 
 function set_game_state(state)
@@ -52,18 +70,32 @@ function play_start()
 		tail={}
 	}
 	
-	snek_add_chunk(snek,6)
+	snek_add_chunk(snek,3)
 	
 	apples={}
 	apple_ct=1
 	for i=1,apple_ct do
 		add_apple()
 	end
+
 end
 
 function _update()
-	if game.state then
-		game.state.update(1/30)
+	dt=1/30
+
+	for s in all(sequences) do
+		if s.cr and costatus(s.cr)~="dead" then
+			assert(coresume(s.cr))
+		else
+			if s.on_finish then
+				s.on_finish()
+			end
+			del(sequences,s)
+		end
+	end
+
+	if game.state and not game.pause then
+		game.state.update(dt)
 	end
 end
 
@@ -71,6 +103,10 @@ function _draw()
 	if game.state then
 		game.state.draw()
 	end
+	
+	draw_fade()
+	
+	draw_log()
 end
 
 function rnd_apple_pos()
@@ -112,7 +148,16 @@ end
 
 function menu_update(dt)
 	if btnp(4) then
-		set_game_state("play")
+		game.pause=true
+		fade_in(function()
+			sequence(function()
+				set_game_state("play")
+				wait_sec(1)
+				fade_out(function()
+					sequence(function() wait_sec(1); game.pause=false end)
+				end)
+			end)
+		end)
 	end
 end
 
@@ -121,23 +166,26 @@ function menu_draw()
 	
 	print("high scores",64-22,14,0)
 	
-	for i=1,10 do
+	for i=1,k_high_scores do
 		local rec=game.scores[i]
 		local name,score=
 			rec.name,rec.score
 			
-		print(name,64-24,(i-1)*8+24,0)
+		print(tostr(i)..") "..name,64-16-12,(i-1)*8+24,0)
 		
 		local sstr=tostr(score)
 		print(sstr,64+24-#sstr*4,(i-1)*8+24,0)
 	end
 	
 	rectfill(0,0,127,7,5)
-	local m="press 🅾️ or ❎"
-	--print(m,64-#m*2-2,62,0)
 	
 	local m="pico worm"
 	print(m,64-#m*2,1,7)
+	
+	if blink(0.25) then
+ 	local m="press 🅾️ or ❎\n   to start"
+ 	print(m,36,112,0)
+	end
 end
 
 function play_update(dt)
@@ -283,7 +331,7 @@ end
 -->8
 function reset_scores()
 	local scores={}
-	for i=1,10 do
+	for i=1,k_high_scores do
 		scores[i]={name="aaa",score=0}
 	end
 	save_scores(scores)
@@ -292,7 +340,7 @@ end
 function load_scores()
 	local ret={}
 
-	for i=1,10 do
+	for i=1,k_high_scores do
 		local addr=(i-1)*8+0x5e00
 		
 		local c1,c2,c3=
@@ -311,7 +359,7 @@ function load_scores()
 end
 
 function save_scores(scores)
-	for i=1,10 do
+	for i=1,k_high_scores do
 		local addr=(i-1)*8+0x5e00
 		
 		local name,score=
@@ -348,6 +396,93 @@ end
 
 function byte_to_char(byte)
 	return byte_values[byte]
+end
+-->8
+function blink(ivl,tt)
+	tt=tt or t()
+	return tt%(ivl*2)<ivl
+end
+
+function shuffle(a)
+	local n=#a
+	for i=n,2,-1 do
+		local j=flr(rnd(i))+1
+		a[i],a[j]=a[j],a[i]
+	end
+end
+
+_fade_idx={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}
+_fade_f=0
+_fade_time=2
+
+function fade_in(on_finish)
+	shuffle(_fade_idx)
+	sequence(seq_fade_in,on_finish)
+end
+
+function fade_out(on_finish)
+	sequence(seq_fade_out,on_finish)
+end
+
+function seq_fade_in()
+	while _fade_f<1 do
+		_fade_f+=(1/_fade_time)*dt
+		_fade_f=mid(_fade_f,0,1)
+		yield()
+	end
+	_fade_f=1
+end
+
+function seq_fade_out()
+	while _fade_f>0 do
+		_fade_f-=(1/_fade_time)*dt
+		_fade_f=mid(_fade_f,0,1)
+		yield()
+	end
+	_fade_f=0
+end
+
+function draw_fade()
+	if _fade_f>0 then
+		local idx=flr(_fade_f*15)+1
+		local ptn=0
+		for i=1,idx do
+			ptn=bor(ptn,shl(1,_fade_idx[i]-1))
+		end
+		
+		ptn=band(bnot(ptn),0xffff)
+		ptn+=0b0.1
+
+		fillp(ptn)
+		rectfill(0,0,127,127,0x10)
+		fillp()
+	end
+	
+end
+
+function wait_sec(sec)
+	sec=sec or 0
+	while sec>0 do
+		sec-=dt
+		yield()
+	end
+end
+
+logs={}
+function log(m)
+	add(logs,tostr(m))
+	if #logs>20 then
+		for i=1,20 do
+			logs[i]=logs[i+1]
+		end
+		logs[21]=nil
+	end
+end
+
+function draw_log()
+	for i=1,#logs do
+		print(logs[i],127-#logs[i]*4,(i-1)*6,7)
+	end
 end
 __gfx__
 00000000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
