@@ -955,7 +955,19 @@ enemy={
 	x=0,y=0,
 	dx=0,dy=0,
 	w=8,h=8, --half width/height
-	state=0,
+	state="idle",
+	fsm=machine:new({
+		default="idle",
+		states={
+			idle=state:new({name="idle",
+				tick=function(self,dt)
+					self.x-=gm.move_speed*dt
+				end,
+				next=function(self,dt)
+					if self.x
+			})
+		}
+	})
 	sp=0,
 	sw=1,sh=1,
 	max_health=10,
@@ -1003,8 +1015,10 @@ function enemy:on_awake()
 end
 
 function enemy:update(dt)
+	if (self.t_flash>0) self.t_flash-=dt
+
 	if self.state==enemy.k.s_idle then
-		self.x-=gm.move_speed*dt
+		
 		
 		if self.x<120 then
 			self.state=enemy.k.s_active
@@ -1019,9 +1033,17 @@ end
 
 function enemy:draw()
 	if self.sp>0 then
+		if self.t_flash>0 then
+			for i=1,15 do
+				pal(i,8)
+			end
+		end
+	
 		spr(self.sp,self.x-self.w,
 			self.y-self.h,
 			self.sw,self.sh)
+			
+		pal()
 	end
 end
 
@@ -1361,23 +1383,55 @@ end
 --			vars to check
 --			state to transition to
 
-fsm={
-	vars={},
-	states={},
-	transitions={
-		
-	}
+state={
+	name="default"
 }
 
-state={
-	tick=
-	function(self,dt)
-		-- code to do stuff
- end,
-	transitions={
-		
-	}
-}
+function state:on_start()
+end
+
+function state:on_tick(dt)
+end
+
+function state:on_end()
+end
+
+function state:next()
+	return self.name
+end
+
+function state:new(p)
+	self.__index=self
+	return setmetatable(p,self)
+end
+
+machine={}
+
+function machine:new(p)
+	self.__index=self
+	return setmetatable(p,self)
+end
+
+function machine:tick(dt)
+	if not self.current then
+		local default=self.states[self.default]
+		assert(default)
+		self.current=default
+		self.current:on_start()
+	end
+	
+	self.current:on_tick(dt)
+	
+	local name=self.current:next()
+	local next=self.states[name]
+	
+	if next and next~=self.current
+ then
+		self.current:on_end()
+		self.current=next
+		self.current:on_start()
+	end
+end
 __gfx__
 0000000020000000c000000010000000100000000000000000000000007000000000000000000000000000000000000000099900000000000009990000000000
 0000000044211000ccc7700011177000111110000000000000000000070000000000000000000900000000000000090000019990000119900001999000011990
