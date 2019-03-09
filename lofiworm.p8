@@ -467,13 +467,13 @@ function insert_score(scores,score)
 end
 
 char_values={
-	a=0,b=1,c=2,d=3,
-	e=4,f=5,g=6,h=7,
-	i=8,j=9,k=10,l=11,
-	m=12,n=13,o=14,p=15,
-	q=16,r=17,s=18,t=19,
-	u=20,v=21,w=22,x=23,
-	y=24,z=25,
+	a=1,b=2,c=3,d=4,
+	e=5,f=6,g=7,h=8,
+	i=9,j=10,k=11,l=12,
+	m=13,n=14,o=15,p=16,
+	q=17,r=18,s=19,t=20,
+	u=21,v=22,w=23,x=24,
+	y=25,z=26,
 }
 
 byte_values={}
@@ -488,7 +488,11 @@ function char_to_byte(str)
 end
 
 function byte_to_char(byte)
-	return byte_values[byte]
+	if byte==0 then
+		return " "
+	else
+		return byte_values[byte]
+	end
 end
 
 function scores_need_reset()
@@ -720,7 +724,7 @@ end
 -->8
 function name_start()
 	cur=1
-	chars={-1,-1,-1}
+	chars={0,0,0}
 	name_exit=false
 end
 
@@ -741,14 +745,14 @@ function name_update(dt)
  	if (btnp(2)) chars[cur]-=1
  	if (btnp(3)) chars[cur]+=1
  
- 	if (chars[cur]<-1) chars[cur]=25
- 	if (chars[cur]>25) chars[cur]=-1
+ 	if (chars[cur]<0) chars[cur]=26
+ 	if (chars[cur]>26) chars[cur]=0
  else
  	if not lock and btnp(4) then
  		-- insert score
  		local str=""
  		for i=1,3 do
- 			if chars[i]<0 then
+ 			if chars[i]<=0 then
  				str=str.." "
  			else
  				str=str..byte_values[chars[i]]
@@ -785,7 +789,7 @@ function name_draw()
 	for i=1,3 do
 		local x=64+(i-2)*spacing
 		line(x,66,x+2,66,0)
-		if chars[i]>=0 then
+		if chars[i]>0 then
 			local c=byte_values[chars[i]]
 			print(c,x,60,0)
 		end
@@ -798,7 +802,6 @@ function name_draw()
 		spr(3,80,60)
 	end
 	pal()
-	print(cur,0,0,0)
 end
 
 function up_arrow(x,y)
