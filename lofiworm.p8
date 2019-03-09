@@ -1,10 +1,28 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
-function _init()
-	k_high_scores=5
+function is_dev() return peek(0x5f2d)>0 end
 
+function _init()
+	poke(0x5f2d,0)
+	if (is_dev()) log("debug on",8)
+
+	_fade_f=1
+	
+
+	k_high_scores=5
+	
 	cartdata("tdjx_worm_01")
+
+	if scores_need_reset() then
+		reset_scores(default_score)
+	end
+	
+	
+	menuitem(1,"return to title",
+		function() 
+			sequence(seq_return_to_title)
+		end)
 		
 	game={
 		score=0,
@@ -25,6 +43,11 @@ function _init()
 			start=play_start,
 			update=play_update,
 			draw=play_draw
+		},
+		name={
+			start=name_start,
+			update=name_update,
+			draw=name_draw
 		}
 	}
 
@@ -36,6 +59,8 @@ function _init()
 		end,fade_out)
 	end)]]
 
+	shuffle(_fade_idx)
+	fade_out()
 	set_game_state("menu")
 end
 
@@ -66,11 +91,13 @@ function play_start()
 		invul_f=10,
 		last_x=63,
 		last_y=63,
-		col_idx=9,
+		col_idx=5,
+		chunk_dist=2,
+		app_chunk=6,
 		tail={}
 	}
 	
-	snek_add_chunk(snek,3)
+	snek_add_chunk(snek,snek.app_chunk)
 	
 	apples={}
 	apple_ct=1
@@ -80,8 +107,28 @@ function play_start()
 
 end
 
-function _update()
-	dt=1/30
+function keypress(key)
+	if key=="s" then
+		snek_add_chunk(snek,snek.app_chunk)
+	elseif key=="a" then
+		game.score+=10
+	elseif key=="d" then
+		snek.dead=true
+	elseif key=="-" then
+		reset_scores(function() return 0 end)
+		game.scores=load_scores()
+		save_scores(game.scores)
+	end
+end
+
+function _update60()
+	dt=1/60
+	
+	if is_dev() then
+		while stat(30) do
+			keypress(stat(31))
+		end
+	end
 
 	for s in all(sequences) do
 		if s.cr and costatus(s.cr)~="dead" then
@@ -94,7 +141,12 @@ function _update()
 		end
 	end
 
-	if game.state and not game.pause then
+	local modal=modal_update(dt)
+
+	if not modal
+		and game.state
+		and not game.pause
+	then
 		game.state.update(dt)
 	end
 end
@@ -104,9 +156,14 @@ function _draw()
 		game.state.draw()
 	end
 	
-	draw_fade()
+	modal_draw()
 	
-	draw_log()
+	draw_fade()
+	draw_message()
+	
+	if is_dev() then
+		draw_log()
+	end
 end
 
 function rnd_apple_pos()
@@ -144,11 +201,22 @@ function snek_add_chunk(s,ct)
 end
 
 function menu_start()
+	menu_exit=false
+	menuitem(2,"reset highscores",function()
+		show_modal("reset scores?",function(opt)
+			if opt=="yes" then
+				reset_scores(default_score)
+				game.scores=load_scores()
+			end
+		end)
+	end)
 end
 
 function menu_update(dt)
-	if btnp(4) then
-		game.pause=true
+	if btnp(4) or btnp(5) then
+		sequence(seq_game_start)
+		menuitem(2)
+--[[		game.pause=true
 		fade_in(function()
 			sequence(function()
 				set_game_state("play")
@@ -157,7 +225,7 @@ function menu_update(dt)
 					sequence(function() wait_sec(1); game.pause=false end)
 				end)
 			end)
-		end)
+		end)]]
 	end
 end
 
@@ -177,104 +245,119 @@ function menu_draw()
 		print(sstr,64+24-#sstr*4,(i-1)*8+24,0)
 	end
 	
-	rectfill(0,0,127,7,5)
+	draw_header()
 	
-	local m="pico worm"
-	print(m,64-#m*2,1,7)
+	local m1="turn with ⬅️/➡️"
+	local m2="eat apples to grow"
+	local m3="avoid yourself and walls"
+	print(m1,64-#m1*2-3,76,0)
+	print(m2,64-#m2*2,84,0)
+	print(m3,64-#m3*2,92,0)
 	
-	if blink(0.25) then
+	local br=1/2
+	if (menu_exit) br=1/16
+	if blink(br) then
  	local m="press 🅾️ or ❎\n   to start"
  	print(m,36,112,0)
 	end
 end
 
+function draw_header()
+	rectfill(0,0,127,7,5)
+	
+	local m="pico worm"
+	print(m,64-#m*2,1,7)
+end
+
 function play_update(dt)
 	if (snek.invul_f>0) snek.invul_f-=1
+
+	if not snek.dead then
+		if dist(snek.x,snek.y,snek.last_x,snek.last_y)>=snek.chunk_dist then
+ 		snek.last_x=snek.x
+ 		snek.last_y=snek.y
+  	local n=#snek.tail
+  	if n>0 then
+   	for i=n,2,-1 do
+   		snek.tail[i].x=
+   			snek.tail[i-1].x
+   		snek.tail[i].y=
+   			snek.tail[i-1].y
+   	end
+   	snek.tail[1].x=snek.x
+   	snek.tail[1].y=snek.y
+   end
+ 	end
 	
-	if dist(snek.x,snek.y,snek.last_x,snek.last_y)>=3 then
-		snek.last_x=snek.x
-		snek.last_y=snek.y
- 	local n=#snek.tail
- 	if n>0 then
-  	for i=n,2,-1 do
-  		snek.tail[i].x=
-  			snek.tail[i-1].x
-  		snek.tail[i].y=
-  			snek.tail[i-1].y
-  	end
-  	snek.tail[1].x=snek.x
-  	snek.tail[1].y=snek.y
-  end
-	end
+		local ix,iy=0,0
 	
-	local ix,iy=0,0
-	
-	if (btn(0)) ix-=1
-	if (btn(1)) ix+=1
-	if (btn(2)) iy-=1
-	if (btn(3)) iy+=1
-	
-	snek.r+=snek.turn*dt*-ix
-	
-	local vx,vy=cos(snek.r)*snek.speed,
-		sin(snek.r)*snek.speed
+ 	if (btn(0)) ix-=1
+ 	if (btn(1)) ix+=1
+ 	if (btn(2)) iy-=1
+ 	if (btn(3)) iy+=1
+ 	
+ 	snek.r+=snek.turn*dt*-ix
+ 	
+ 	local vx,vy=cos(snek.r)*snek.speed,
+ 		sin(snek.r)*snek.speed
 		
-	if snek.dead then
-		vx,vy=0,0
-		
+ 	snek.x+=vx*dt
+ 	snek.y+=vy*dt
+ 	
+ 	for a in all(apples) do
+ 		if circhit(snek,a) then
+ 			snek_add_chunk(snek,snek.app_chunk)
+ 			a.x,a.y=rnd_apple_pos()
+ 			game.score+=1
+ 		end
+ 	end
+	
+ 	if snek.invul_f<=0 then
+ 		local n=#snek.tail
+ 		local ox,oy=snek.x,snek.y
+ 		local dx,dy=cos(snek.r),sin(snek.r)
+ 		for i=snek.col_idx,n-1 do
+ 			local ax,ay,bx,by=
+ 				snek.tail[i].x,
+ 				snek.tail[i].y,
+ 				snek.tail[i+1].x,
+ 				snek.tail[i+1].y
+ 			local hit,dst,dbg=ray_line_check(
+ 				ox,oy,dx,dy,ax,ay,bx,by)
+ 			
+ 			if hit and dst<=snek.speed*dt then
+ 				snek.dead=true
+ 			end
+ 		end
+ 	end
+	
+		if level_solid(snek.x,snek.y)
+ 	or snek.x>127 or snek.x<0
+ 	or snek.y>127 or snek.y<0
+ 	then
+ 		snek.dead=true
+ 	end
+	else
 		if (btnp(4)) then
-			set_game_state("play")
-		end
-	end
-		
-	snek.x+=vx*dt
-	snek.y+=vy*dt
-	
-	for a in all(apples) do
-		if circhit(snek,a) then
-			snek_add_chunk(snek,3)
-			a.x,a.y=rnd_apple_pos()
-			game.score+=1
-		end
-	end
-	
-	if snek.invul_f<=0 then
-		for i=snek.col_idx,#snek.tail do
-			if circhit(snek,snek.tail[i]) then
-				snek.dead=true
+			if has_high_score() then
+				set_game_state("name")
+			else
+				set_game_state("play")
 			end
 		end
-	end
-	
-	if level_solid(snek.x,snek.y)
-	or snek.x>127 or snek.x<0
-	or snek.y>127 or snek.y<0
-	then
-		snek.dead=true
 	end
 end
 
 function play_draw()
 	cls(6)
 
-	if false then	
-	for x=0,127,8 do
-		line(x,0,x,127,5)
-	end
-	for y=0,127,8 do
-		line(0,y,127,y,5)
-	end
-	
-	line(0,63,127,63,6)
-	line(63,0,63,127,6)
-	end
-	
-	map(0,0,0,0,16,16)
+	--map(0,0,0,0,16,16)	
 	
 	for a in all(apples) do
 		circfill(a.x,a.y,a.rad,0)
 	end
 	
+	-- draw
 	local n=#snek.tail
 	for i=n,2,-1 do
 		local sc=3
@@ -284,35 +367,27 @@ function play_draw()
 			snek.tail[i-1].x,
 			snek.tail[i-1].y,
 			0)
-		local c=10
-		if (i<snek.col_idx) c=9
---[[		pset(snek.tail[i].x,
-			snek.tail[i].y,
-			c)]]
---[[		circfill(snek.tail[i].x,
-			snek.tail[i].y,
-			snek.tail[i].rad,
-			11)]]
 	end
 	line(snek.tail[1].x,
 		snek.tail[1].y,
 		snek.x,
 		snek.y,
 		0)
---[[	pset(snek.tail[1].x,
-		snek.tail[1].y,
-		9)]]
 		
---[[	circfill(sx+cos(snek.r)*2,
-		sy+sin(snek.r)*2,
-		1,
-		10)]]
+	draw_header()
 		
-	print(game.score,0,1,7)
-	--print(tostr(band(stat(1)*100).."%",0xffff),0,0,7)
+	print("score:"..game.score,1,1,7)
 	
+	local high=next_high()
+	local highmsg="high:"..high
+	print(highmsg,126-#highmsg*4,1,7)
+
 	if snek.dead then
-		print("dead",56,62,8)
+		print("dead",56,54,8)
+		if has_high_score() then
+			local m="new high score!"
+			print(m,64-#m*2,62,8)
+		end
 	end
 end
 
@@ -321,18 +396,19 @@ function dist(x1,y1,x2,y2)
 	return sqrt(dx*dx+dy*dy)
 end
 
-function circhit(c1,c2)
-	return dist(c1.x,c1.y,c2.x,c2.y)<=c1.rad+c2.rad
+function circhit(c1,c2,radj)
+	return dist(c1.x,c1.y,c2.x,c2.y)<=c1.rad+c2.rad+(radj or 0)
 end
 
 function level_solid(x,y)
 	return fget(mget(x/8,y/8),0)
 end
 -->8
-function reset_scores()
+function reset_scores(scorefn)
 	local scores={}
+	scorefn=scorefn or function(i) return 0 end
 	for i=1,k_high_scores do
-		scores[i]={name="aaa",score=0}
+		scores[i]={name="aaa",score=scorefn(k_high_scores-i+1)}
 	end
 	save_scores(scores)
 end
@@ -373,6 +449,23 @@ function save_scores(scores)
 	end
 end
 
+function insert_score(scores,score)
+	local n=#scores
+	local idx=#scores+1
+	for i=n,1,-1 do
+		if scores[i].score>=score.score then
+			break
+		else
+			idx=i
+		end
+	end
+	
+	for i=n,idx+1,-1 do
+		scores[i]=scores[i-1]
+	end
+	scores[idx]=score
+end
+
 char_values={
 	a=0,b=1,c=2,d=3,
 	e=4,f=5,g=6,h=7,
@@ -397,6 +490,31 @@ end
 function byte_to_char(byte)
 	return byte_values[byte]
 end
+
+function scores_need_reset()
+	local k_score_size=8
+	for i=0x5e00,0x5e00+k_high_scores*k_score_size do
+		if peek(i)~=0 then
+			return false
+		end
+	end
+	return true
+end
+
+function has_high_score()
+	return game.score>game.scores[#game.scores].score
+end
+
+function next_high()
+	for i=#game.scores,1,-1 do
+		if game.scores[i].score>=game.score then
+			return game.scores[i].score
+		end
+	end
+	return game.score
+end
+
+function default_score(i) return i*2 end
 -->8
 function blink(ivl,tt)
 	tt=tt or t()
@@ -413,7 +531,7 @@ end
 
 _fade_idx={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}
 _fade_f=0
-_fade_time=2
+_fade_time=1
 
 function fade_in(on_finish)
 	shuffle(_fade_idx)
@@ -422,6 +540,66 @@ end
 
 function fade_out(on_finish)
 	sequence(seq_fade_out,on_finish)
+end
+
+function seq_game_start_fast()
+	set_game_state("play")
+end
+
+_rnd_messages={
+	"you're a good worm",
+	"the earliest bird\n can't get you",
+	"just try your best\nyou're just a worm",
+	"steady thyself\n young worm",
+	"1) acquire apples\n2) ??????\n3) profit",
+}
+
+function seq_game_start()
+	-- fade in
+	-- wait
+	-- start message enters
+	-- start message waits
+	-- start message leaves
+	-- fade out
+	-- pause briefly
+	-- game starts
+	
+	game.pause=true
+	menu_exit=true
+	
+	wait_sec(1/2)
+		
+	shuffle(_fade_idx)
+	seq_fade_in()
+	
+	set_game_state("play")
+	wait_sec(1/2)
+	
+	local i=flr(rnd(#_rnd_messages))+1
+	_message=_rnd_messages[i]
+	wait_sec(2)
+	_message=nil
+	
+	wait_sec(0)
+	
+	seq_fade_out()
+	wait_sec(1/2)
+	
+	game.pause=false
+end
+
+function seq_return_to_title()
+	game.pause=true
+		
+	shuffle(_fade_idx)
+	seq_fade_in()
+	
+	set_game_state("menu")
+	wait_sec(1/2)
+	
+	seq_fade_out()
+	
+	game.pause=false
 end
 
 function seq_fade_in()
@@ -460,6 +638,14 @@ function draw_fade()
 	
 end
 
+_message=nil
+function draw_message()
+	if _message then
+		local w=str_width(_message)
+		print(_message,64-w/2,60,7)
+	end
+end
+
 function wait_sec(sec)
 	sec=sec or 0
 	while sec>0 do
@@ -468,9 +654,20 @@ function wait_sec(sec)
 	end
 end
 
+function wait_for(pred,to)
+	to=to or -1
+	while not pred() do
+		if t0>0 then
+			t0-=dt
+			if (t0<=0) break
+		end
+		yield()
+	end
+end
+
 logs={}
-function log(m)
-	add(logs,tostr(m))
+function log(m,c)
+	add(logs,{m=tostr(m),c=c or 7})
 	if #logs>20 then
 		for i=1,20 do
 			logs[i]=logs[i+1]
@@ -481,18 +678,235 @@ end
 
 function draw_log()
 	for i=1,#logs do
-		print(logs[i],127-#logs[i]*4,(i-1)*6,7)
+		local m,c=logs[i].m,logs[i].c
+		print(m,127-#m*4,(i-1)*6,c)
 	end
 end
+-->8
+function
+ray_line_check
+(ox,oy,dx,dy,ax,ay,bx,by)
+
+ local tox,toy=ox-ax,oy-ay
+ local dlx,dly=bx-ax,by-ay
+ local px,py=-dy,dx
+ 
+ local dot=dlx*px+dly*py
+ 
+ if dot==0 then
+ 	return false,-1
+ end
+ 
+ --x1*y2-y1*x2
+ local det=dlx*toy-dly*tox
+ 
+ local hit=-1
+ if abs(dot)>0.01 then
+	 hit=det/dot
+	else
+		hit=32767
+	end
+
+	local pos=(tox*px+toy*py)/dot
+	
+	return (hit>=0 and
+		pos>=0 and pos<=1),hit,{
+			tox=tox,toy=toy,
+			dlx=dlx,dly=dly,
+			px=px,py=py,
+			dot=dot,hit=hit,pos=pos
+		}
+end
+-->8
+function name_start()
+	cur=1
+	chars={-1,-1,-1}
+	name_exit=false
+end
+
+function name_update(dt)
+	if name_exit then
+		return
+	end
+
+	if (btnp(0) or btnp(5)) cur-=1
+	if (btnp(1)) cur+=1
+	
+	local lock=false
+	if (cur<4 and btnp(4)) cur+=1; lock=true
+	
+	cur=mid(cur,1,4)
+
+	if cur<=3 then
+ 	if (btnp(2)) chars[cur]-=1
+ 	if (btnp(3)) chars[cur]+=1
+ 
+ 	if (chars[cur]<-1) chars[cur]=25
+ 	if (chars[cur]>25) chars[cur]=-1
+ else
+ 	if not lock and btnp(4) then
+ 		-- insert score
+ 		local str=""
+ 		for i=1,3 do
+ 			if chars[i]<0 then
+ 				str=str.." "
+ 			else
+ 				str=str..byte_values[chars[i]]
+ 			end
+ 		end
+ 		insert_score(game.scores,{name=str,score=game.score})
+ 		save_scores(game.scores)
+ 		sequence(seq_name_exit)
+ 	end
+ end
+end
+
+function seq_name_exit()
+	name_exit=true
+	wait_sec(1/2)
+	seq_return_to_title()
+end
+
+function name_draw()
+	cls(6)
+	
+	draw_header()
+	
+	local spacing=8
+	
+	if cur<=3 then
+ 	
+ 	local x=64+(cur-2)*spacing-1
+ 	rectfill(x,59,x+4,65,12)
+ 	up_arrow(x,54)
+ 	down_arrow(x,68)
+	end
+	
+	for i=1,3 do
+		local x=64+(i-2)*spacing
+		line(x,66,x+2,66,0)
+		if chars[i]>=0 then
+			local c=byte_values[chars[i]]
+			print(c,x,60,0)
+		end
+	end
+	
+	if cur==4 then
+		pal(7,12)
+	end
+	if not name_exit or blink(1/16) then
+		spr(3,80,60)
+	end
+	pal()
+	print(cur,0,0,0)
+end
+
+function up_arrow(x,y)
+	sspr(16,0,5,3,x,y,5,3)
+end
+
+function down_arrow(x,y)
+	sspr(16,5,5,3,x,y,5,3)
+end
+-->8
+_modal={
+	on=off,
+	x=64,y=64,
+	w=80,h=40,
+	message="",
+	select=1,
+	options={"yes","no"}
+}
+
+function show_modal(message,on_select,options,current)
+	_modal.on=true
+	_modal.on_select=on_select
+	_modal.message=message
+	_modal.options=options or {"no","yes"}
+	_modal.select=current or 1
+end
+
+function modal_update()
+	if not _modal.on then
+		return false
+	end
+	
+	if (btnp(0)) _modal.select-=1
+	if (btnp(1)) _modal.select+=1
+	
+	if (_modal.select<1) _modal.select=#_modal.options
+	if (_modal.select>#_modal.options) _modal.select=1
+	
+	if btnp(4) then
+		_modal.on=false
+		_modal.on_select(_modal.options[_modal.select])
+	end
+	
+	return true
+end
+
+function modal_draw()
+	if not _modal.on then
+		return
+	end
+	
+	local x,y,w,h=_modal.x,
+		_modal.y,_modal.w,_modal.h
+	
+	rectfill(x-w/2,y-h/2,x+w/2,y+h/2,6)
+	rect(x-w/2,y-h/2,x+w/2,y+h/2,0)
+	rect(x-w/2+2,y-h/2+2,x+w/2-2,y+h/2-2,0)
+	
+	print(_modal.message,
+		x-#_modal.message*2,
+		y-6,
+		0)
+
+	local sx=x+(_modal.select-2)*20
+	rectfill(sx-1,y+8,sx+#_modal.options[_modal.select]*4-1,y+14,12)
+		
+	for i=1,#_modal.options do
+		local px=x+(i-2)*20
+		local py=y+9
+		rect(px-2,py-2,px+#_modal.options[i]*4,py+6,0)
+		print(_modal.options[i],px,py,0)
+	end
+end
+-->8
+function str_width(str)
+	local n=#str
+	local m=0
+	local l=0
+	for i=1,n do
+		if sub(str,i,i)=="\n" then
+			if (l>m) m=l
+			l=0
+		else
+			l+=1
+		end
+	end
+	return max(m,l)*4
+end
+
+function str_height(str)
+	local n=#str
+	local row=1
+	for i=1,n do
+		if sub(str,i,i)=="\n" then
+			row+=1
+		end
+	end
+	return row*5+(row-1)*1
+end
 __gfx__
-00000000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000555555550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000888888880070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000888888880777000000007000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700888888887777700000007000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000888888880000000007777070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000888888880000000007077700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700888888887777700007777070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000888888880777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000888888880070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __gff__
 0001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
