@@ -2,13 +2,16 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 function _init()
-	player=actor:new({x=8,y=0})
+	player=actor:new({x=8,y=15})
 end
 
-function _update()
-	dt=1/30
+--function _update() dt=1/30; update(dt) end
+function _update60() dt=1/60; update(dt) end
 
-	player.ddy=2*dt
+function update(dt)
+	jk_update()
+	
+	player.ddy=2
 	
 	local ix,iy=0,0
 	if (btn(0)) ix-=1
@@ -16,20 +19,31 @@ function _update()
 	if (btn(2)) iy-=1
 	if (btn(3)) iy+=1
 	
-	local accel=1.5*dt
+	local bx,bo=btnp(4),btnp(5)
+	
+	player.inp.x=ix
+	player.inp.y=iy
+	player.inp.bx=bx
+	player.inp.bo=bo
+	
+	
+	local accel=480/2*dt
 	if not player:getf(af.grounded) then
-		accel/=2
+		accel=shr(accel,1)
 	end
 	
 	if ix<0 then
-		player.dx-=accel
+		player.dx-=accel*dt
 		player.face=-1
+	elseif ix>0 then
+		player.dx+=accel*dt
+		player.face=1
+	else
+		player.dx=moveto(player.dx,0,1*dt)
 	end
 	
-	if ix>0 then
-		player.dx+=accel
-		player.face=1
-	end
+--	player.dx=5*ix*dt
+--	if (ix~=0) player.face=sgn(ix)
 	
 	local stand=player:getf(af.grounded)
 	
@@ -37,16 +51,20 @@ function _update()
 		player.jumps=0
 	end
 	
-	local canjump= (stand)
-		or	(not stand
-						and player.jumps<1)
+	local canjump=stand
+		or player.jumps<0
 
-	if btnp(4) and canjump then
-		player.dy=-0.6
+		
+	if player.inp.bx and canjump then
+		player:jump(dt)
+		--player:force(0,-18)
 		player.jumps+=1
 	end
 	
-	player:move()
+	player:move(dt)
+	
+	watch("pos:"..player.x..","..player.y)
+	watch("vel:"..player.dx/dt..","..player.dy/dt)
 end
 
 function _draw()
@@ -59,6 +77,7 @@ function _draw()
 	pset(sx,sy,8)
 	
 	draw_log()
+	draw_watch()
 end
 -->8
 -- actors
@@ -76,9 +95,14 @@ actor={
 	face=1,
 	flags=0,
 	jumps=0,
+	mass=1,
+	drag=0,
 	k_coldst=0.3, -- collision check distance
 	k_scndst=0.1, -- scan distance while searching for contact point
-	k_bounce=0
+	k_bounce_wall=0,
+	k_bounce_floor=0,
+	k_jump_force=24,
+	k_max_move=8
 }
 
 function actor:premove()
@@ -87,8 +111,39 @@ end
 function actor:postmove()
 end
 
-function actor:move()
+function actor:jump(dt)
+	local f=min(self.k_jump_force*dt,1)
+	self.dy=-f
+end
+
+function actor:force(fx,fy)
+	local m=max(self.mass,0.01)
+	self.dx+=fx/m*dt
+	self.dy+=fy/m*dt
+end
+
+function actor:friction(fx,fy)
+	fx=mid(fx,0,1)
+	fy=mid(fy,0,1)
+	self.dx=self.dx*(1-fx)
+	self.dy=self.dy*(1-fy)
+end
+
+function actor:linfric(fx,fy)
+	self.dx=moveto(self.dx,0,fx*dt)
+	self.dy=moveto(self.dy,0,fy*dt)
+end
+
+function actor:move(dt)
 	self:setf(af.grounded,false)
+	
+	self.dx+=self.ddx*dt
+	self.dy+=self.ddy*dt
+	
+	local max_x,max_y=
+		self.k_max_move*dt,30*dt
+	self.dx=mid(self.dx,-max_x,max_x)
+	self.dy=mid(self.dy,-max_y,max_y)
 	
 	-- x movement
 	local nx=self.x+
@@ -108,7 +163,7 @@ function actor:move()
 		end
 		
 		-- bounce
-		self.dx*=-0.5
+		self.dx*=-self.k_bounce_wall
 	end
 
 	-- y movement	
@@ -138,10 +193,10 @@ function actor:move()
 			or solid(right,self.y+self.dy)
 		then
 			-- bounce
-			if self.k_bounce>0 and
+			if self.k_bounce_floor>0 and
 				self.dy>0.2
 			then
-				self.dy*=-self.k_bounce
+				self.dy*=-self.k_bounce_floor
 			else
 				self:setf(af.grounded,true)
 				self.dy=0
@@ -153,7 +208,7 @@ function actor:move()
 			do
 				self.y+=0.05
 			end
---			log(fget(mget(self.x,self.y),0))
+
 			-- pop up
 			while solid(left,self.y-0.1)
 			do
@@ -167,22 +222,13 @@ function actor:move()
 			self.y+=self.dy
 		end
 	end
-	
-	self.dx+=self.ddx
-	self.dy+=self.ddy
-	
-	if self:getf(af.standing) then
-		self.dx*=0.8
-		self.dy*=0.8
-	else
-		self.dx*=0.9
-		self.dy*=0.9
-	end
 end
 
 function actor:new(p)
 	self.__index=self
-	return setmetatable(p or {},self)
+	p=p or {}
+	p.inp={x=0,y=0,bx=false,by=false}
+	return setmetatable(p,self)
 end
 
 function actor:setf(f,v)
@@ -207,6 +253,30 @@ function sgn(v)
 	return _sgn(v)
 end
 
+function moveto(a,b,d)
+	if abs(b-a)<=d then
+		return b
+	else
+		return a+sgn(b-a)*d
+	end
+end
+
+_watches={}
+
+function watch(msg,col)
+	add(_watches,{msg=tostr(msg),
+		col=col or 12})
+end
+
+function draw_watch(col)
+	col=col or 12
+	local n=#_watches
+	for i=0,n-1 do
+		local w=_watches[i+1]
+		print(w.msg,0,i*6,w.col)
+	end
+end
+
 _logs={}
 
 function log(msg,col)
@@ -227,6 +297,40 @@ function draw_log()
 		print(l.msg,127-#l.msg*4,(i-1)*6,l.col)
 	end
 end
+
+_jk_btns={}
+for i=0,5 do
+	_jk_btns[i]={
+		last={},
+		curr={},
+	}
+end
+
+function jk_update()
+	_watches={}
+
+	for p=0,5 do
+		local pl=_jk_btns[p]
+		for b=0,5 do
+			pl.last[b]=pl.curr[b] or false
+			pl.curr[b]=btn(b,p)
+		end
+	end
+end
+
+_btnp=btnp
+function btnp(b,p)
+	p=p or 0
+	local pl=_jk_btns[p]
+	return pl.curr[b] and not pl.last[b]
+end
+
+function btnr(b,p)
+	p=p or 0
+	local pl=_jk_btns[p]
+	return not pl.curr[b] and pl.last[b]
+end
+
 -->8
 -- physics
 
@@ -250,6 +354,7 @@ function map_solid(wx,wy)
 	val=mget(wx,wy)
 	return fget(val,0)
 end
+
 __gfx__
 00000000099999905555555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000009aaaaa05555555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -269,9 +374,9 @@ __map__
 0200000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0200000000000002000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0200000000000202020200000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0200000000020200000000000202020200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0200000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0200000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0200000000020000000000000202020200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000200000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000002020200000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

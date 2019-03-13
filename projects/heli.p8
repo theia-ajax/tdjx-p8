@@ -90,7 +90,7 @@ function _init()
 	init_timers()
 	
 	smooth_mode=8
-	gen()
+--	gen()
 		
 	level_table={
 		{ 
@@ -1052,13 +1052,31 @@ end
 
 function draw_watch()
 	local n=#__watch
-	fillp(0b01010010110100101.1)
-	rectfill(0,0,__watch.sx,__watch.sy,0)
 	for i=1,n do
 		local m=__watch[i]
 		print(m,0,(i-1)*6,11)
 	end
-	fillp()
+end
+
+_logs={}
+
+function log(m,c)
+	add(_logs,{m=tostr(m),c=c or 7})
+	local n=#_logs
+	if n>21 then
+		for i=2,n do
+			_logs[i]=_logs[i+1]
+		end
+		_logs[n]=nil
+	end
+end
+
+function draw_log()
+	local n=#_logs
+	for i=1,n do
+		local l=_logs[i]
+		print(l.m,127-#l.m*4,(i-1)*6,l.c)
+	end
 end
 
 function mod(a,b)
@@ -1705,18 +1723,17 @@ function calc_lake_size(x,y,mx)
 end
 
 function smooth_water()
-	local last_t=t()
 	for y=0,63 do
 		for x=0,127 do
 			if mget(x,y)==2 then
 				fill_lake(x,y,3)
 			end
+			if x%64==0 then
+				gen_bar("filling small ponds",(x+y*128)/(64*128))
+			end
 		end
-  if y%8==0 or t()-last_t>0.2 then
-   gen_bar("filling small ponds",y/63)
-   last_t=t()
-  end
-	end
+  
+ end
 end
 
 function smooth_land(mode)
