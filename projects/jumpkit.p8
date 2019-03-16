@@ -25,42 +25,8 @@ function update(dt)
 	player.inp.y=iy
 	player.inp.bx=bx
 	player.inp.bo=bo
-	
-	
-	local accel=480/2*dt
-	if not player:getf(af.grounded) then
-		accel=shr(accel,1)
-	end
-	
-	if ix<0 then
-		player.dx-=accel*dt
-		player.face=-1
-	elseif ix>0 then
-		player.dx+=accel*dt
-		player.face=1
-	else
-		player.dx=moveto(player.dx,0,1*dt)
-	end
-	
---	player.dx=5*ix*dt
---	if (ix~=0) player.face=sgn(ix)
-	
-	local stand=player:getf(af.grounded)
-	
-	if stand then	
-		player.jumps=0
-	end
-	
-	local canjump=stand
-		or player.jumps<0
 
-		
-	if player.inp.bx and canjump then
-		player:jump(dt)
-		--player:force(0,-18)
-		player.jumps+=1
-	end
-	
+	player:control(dt)
 	player:move(dt)
 	
 	watch("pos:"..player.x..","..player.y)
@@ -97,12 +63,14 @@ actor={
 	jumps=0,
 	mass=1,
 	drag=0,
+	t_air=0,
 	k_coldst=0.3, -- collision check distance
 	k_scndst=0.1, -- scan distance while searching for contact point
 	k_bounce_wall=0,
 	k_bounce_floor=0,
 	k_jump_force=24,
-	k_max_move=8
+	k_max_move=8,
+	k_jump_forgive_t=5/60
 }
 
 function actor:premove()
@@ -132,6 +100,40 @@ end
 function actor:linfric(fx,fy)
 	self.dx=moveto(self.dx,0,fx*dt)
 	self.dy=moveto(self.dy,0,fy*dt)
+end
+
+function actor:control(dt)
+	local accel=480/2*dt
+	if not self:getf(af.grounded) then
+		accel=shr(accel,1)
+	end
+	
+	if self.inp.x<0 then
+		self.dx-=accel*dt
+		self.face=-1
+	elseif self.inp.x>0 then
+		self.dx+=accel*dt
+		self.face=1
+	else
+		self.dx=moveto(self.dx,0,1*dt)
+	end
+
+	local stand=self:getf(af.grounded)
+
+	if stand then	
+		self.jumps=0
+	end
+	
+	local canjump=stand
+		or self.jumps<0
+		or (not stand
+						and self.t_air<self.k_jump_forgive_t)
+		
+	if self.inp.bx and canjump then
+		self:jump(dt)
+		--player:force(0,-18)
+		self.jumps+=1
+	end
 end
 
 function actor:move(dt)
@@ -221,6 +223,12 @@ function actor:move(dt)
 		else
 			self.y+=self.dy
 		end
+	end
+	
+	if self:getf(af.grounded) then
+		self.t_air=0
+	else
+		self.t_air+=dt
 	end
 end
 

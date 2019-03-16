@@ -30,7 +30,7 @@ function _init()
 	}
 
 	sel={x=-1,y=-1,ld=-1}
-	music(0)
+	music(5,0,1+4+8)
 	heli={
 		x=8,y=8,
 		dx=0,dy=0,
@@ -90,7 +90,7 @@ function _init()
 	init_timers()
 	
 	smooth_mode=8
---	gen()
+	gen()
 		
 	level_table={
 		{ 
