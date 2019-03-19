@@ -99,7 +99,7 @@ end
 function _draw()
 	cls()
 	
-	map(128-16,0,0,0,16,16)
+--	map(128-16,0,0,0,16,16)
 	map(0,0,0,0,16,16,127)
 	
 	foreach(actors,function(a)
@@ -125,22 +125,30 @@ function _draw()
  local conesz=48
  local wx,wy=w2s(player.x,player.y)
  wx,wy=flr(wx),flr(wy-4)
+
+	local dd=36+sin(t()/4)*16
+ local lx,ly=wx,wy
  
- local bright=0.8+sin(t()*4)*0.01
+ local bright=1.5+sin(t()*4)*0.01
  local range=flr(bright*42)
  
- local top=max(wy-range-1,0)
+ local top=max(ly-range-1,0)
  memset(0x6000,0,(top+1)*64)
  
- local bot=min(wy+range+1,127)
+ local bot=min(ly+range+1,127)
  memset(0x6000+bot*64,0,(127-bot+1)*64)
+  
+ --crect(0,0,127,top,fl_black)
+ --crect(0,bot,127,127,fl_black)
+ 
+ crect(0,top+1,lx-range-2,bot-1,fl_black)
+ crect(lx+range,top+1,127,bot-1,fl_black)
  
  local light_fill=fl_light(
- 	wx,wy,bright)
- crect(wx-range-1,wy-range,
- 	wx+range,wy+range,light_fill)
- crect(0,top,wx-range-2,bot,fl_black)
- crect(wx+range,top,127,bot,fl_black)
+ 	lx,ly,bright)
+ crect(lx-range-1,ly-range,
+ 	lx+range,ly+range,light_fill)
+ 
 --[[ 
  ]]
 
@@ -166,6 +174,28 @@ function _draw()
 	draw_watch()
 end
 -->8
+function set(a,b)
+	a=a or {}
+	b=b or {}
+	for k,v in pairs(b) do
+		a[k]=v
+	end
+	return a
+end
+
+function class(clob)
+	clob=clob or {}
+	setmetatable(clob,
+		{__index=clob.extends})
+	klob.new=function(self,ob)
+		ob=set(ob,{class=clob})
+		setmetatable(ob,{__index=clob})
+		if (clob.create) clob:create()
+		return ob
+	end
+	return clob
+end
+
 -- actors
 
 -- actor flags
