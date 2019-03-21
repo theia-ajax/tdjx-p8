@@ -5,13 +5,15 @@ __lua__
 -- tdjx
 
 function _init()
+	dt=1/30
 	ents={}
-	for i=0,600 do
+	for i=0,200 do
 		entity({
 			-- position
 			pos={x=rnd(128),y=rnd(128)},
 			-- heading
 			hed=rnd(),
+			t_life=5+rnd(5),
 			col=11,
 			sz=3
 		})
@@ -21,8 +23,21 @@ function _init()
 		function (e)
 			if ent_hasflg(e,_k_ent_flg_destroy)
 			then
-				add(ents_rq,e.id)
+				del(ents,e)
 			end
+		end)
+		
+	ticklife=system({"t_life"},
+		function(e)
+			e.t_life-=dt
+			if e.t_life<=0 then
+				ent_addflg(e,_k_ent_flg_destroy)
+			end
+		end)
+
+	rndcol=system({"col"},
+		function(e)
+			e.col=1+flr(rnd(15))
 		end)
 
 	movents=system({"pos","hed"},
@@ -50,7 +65,9 @@ end
 
 function _update()
 	movents(ents)
-	-- rements(ents)
+	ticklife(ents)
+	rndcol(ents)
+	rements(ents)
 
 	-- for remid in all(ents_rq) do
 	-- 	for i=1,#ents do
@@ -65,27 +82,26 @@ end
 function _draw()
 	cls()
 	drawents(ents)
-	print("mem:"..stat(0),0,0,6)
-	print("cpu:"..(stat(1)*100).."%",0,6,6)
+	print("ent#:"..#ents,0,0,7)
+	print("mem:"..band(stat(0)/204.8,0xffff).."%",0,6,7)
+	print("cpu:"..band(stat(1)*100,0xffff).."%",0,12,7)
 end
 
-function _has(e, ks)
-  for k,v in pairs(ks) do
-    if not e[v] then
-      return false
-    end
-  end
-  return true
+function _has(e,ks)
+	for k,v in pairs(ks) do
+		if (not e[v]) return false
+	end
+	return true
 end
 
-function system(ks, f)
-  return function(es)
-    for e in all(es) do
-      if _has(e, ks) then
-        f(e)
-      end
-    end
-  end
+function system(ks,f)
+ return function(es)
+		for e in all(es) do
+			if _has(e,ks) then
+				f(e)
+  	end
+		end
+	end
 end
 
 _curr_ent_id=0
