@@ -58,7 +58,7 @@ function _init()
 
 end
 
-function _update()
+function _update60()
 	if (stat(30)) _onkey(stat(31))
 	
 	if dbg_frame_mode then
@@ -173,9 +173,24 @@ end
 function _draw()
 	cls(12)
 
-	foreach(clouds,cloud_draw)
-	
+	--foreach(clouds,cloud_draw)
 	draw_mountains()
+	
+	for k=0,12 do 
+ 	for j=0,2 do 
+ 		srand(k) 
+ 		x=(rnd(500)-t()*62.5)%500-250 
+ 		y=rnd(64)
+ 		z=3-k/10
+ 		for i=0,10 do
+ 			circfill(64+(x+rnd(60)-30+j*3)/z,
+ 				12+(y-rnd()*rnd()*20-j+sin(rnd()+t()/8)*6)/z,
+ 				(rnd(10)+10-j*2.5)/z,5+j)
+ 		end
+ 	end
+ end
+	
+
 
 	rectfill(0,100,127,127,1)
 
@@ -359,6 +374,7 @@ function cloud_draw(cld)
 end
 
 function tick_mountains()
+	srand(gf)
 	mtmvf-=1
 	if mtmvf<=0 then
 		mtmvf=mtmvivl

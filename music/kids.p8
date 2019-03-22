@@ -16,7 +16,7 @@ function _init()
 	mxct=80
 	for i=1,4 do
 		for n=1,mxct do
-			local a=4*k_e*n+(i-1)/16
+			local a=8*k_e*n+(i-1)/16
 			local rad=3
 			local x=cos(a)*rad
  		local y=-n/mxct*4+1
@@ -101,6 +101,7 @@ function _draw()
 	for o in all(queue) do
 		if o.show then
 			circfill(o.sx,o.sy,o.rad,o.col)
+			circfill(o.sx+o.rad/2,o.sy-o.rad/2,o.rad/4-1,7)
 			circ(o.sx,o.sy,o.rad,0)
 		end
 	end
