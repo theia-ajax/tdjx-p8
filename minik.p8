@@ -20,5 +20,7 @@ y[i]=k+e
 end
 end
 for i=2,n do
-line(x[i-1],y[i-1],x[i],y[i],7)end
+line(x[i-1],y[i-1],x[i],y[i],7)
+end
+circfill(x[n],y[n],8,5)
 flip()goto _

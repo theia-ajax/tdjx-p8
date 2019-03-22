@@ -1337,7 +1337,7 @@ function _draw()
  -- apply lighting to all that
  lgt:apply() 
  -- "real" polygonal shadows
- render_wall_shadows()
+ --render_wall_shadows()
 
  show_performance()
 end

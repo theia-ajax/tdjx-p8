@@ -1,7 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
-e=2.7183::_::cls(10)u,q,v,s=t()/16,64,64,63
+e=2.7183::_::cls(10)u,q,v,s=t()/8,64,64,63
 for i=0,22 do
 r=63-i*e
 d=s-r
