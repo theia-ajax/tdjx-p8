@@ -121,7 +121,6 @@ function _draw()
  
  map(0,0,0,0,16,16,128)
  
-	local dd=36+sin(t()/4)*16
  local lx,ly=w2si(player.light.x,player.light.y)
  
  local bright=player.light.bright+sin(t()*4)*0.01
@@ -132,9 +131,6 @@ function _draw()
  
  local bot=min(ly+range+1,127)
  memset(0x6000+bot*64,0,(127-bot+1)*64)
-
- crect(0,top+1,lx-range-2,bot-1,fl_black)
- crect(lx+range,top+1,127,bot-1,fl_black)
  
  local light_fill=fl_light(
  	lx,ly,bright)
