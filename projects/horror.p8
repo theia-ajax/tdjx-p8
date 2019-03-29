@@ -1082,8 +1082,8 @@ _entity_map[1]=clone(
   		ddy=60,
   		light=add_article(light:new()),
   		k_accel=40,
-  		k_max_move=8,
-  		k_jump_force=18,
+  		k_max_move=6,
+  		k_jump_force=17,
   		k_jump_hold_force=0
   	})
   	player.light.owner=player
