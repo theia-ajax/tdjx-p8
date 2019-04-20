@@ -1,80 +1,114 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+show_state=false
+px_delta=4
+
 function _init()
 	cls()
+	
+	poke(0x5f2d,1)
+	
+	seed=flr(rnd(32767))
+--	seed=835
+	seed=15249
+	srand(seed)
+	
+	menuitem(1,"toggle display",
+		function()
+			show_state=not show_state
+		end)
 
 	scene={}
 	scene.spheres={}
 	scene.planes={}
 	scene.lightdir=vec3:new({x=0.5,y=-1,z=0.1}):norm()
 	
-	for i=0,10 do
+	for i=0,0 do
 		add(scene.spheres,sphere:new(
 			{center=vec3:new({
-					x=rnd(20)-10,y=rnd(20)-10,z=10+i*4}),
+					x=rnd(20)-10,y=rnd(20)-10,z=10+i*2}),
 				rad=2,
 				col=7}))
 	end
 	
+	--[[
 	add(scene.planes,plane:new(
 		{origin=vec3:new({y=5}),
 			col=11}))
-			
+			]]
 	cam={
 		pos=vec3:new()
 	}
-	calc_view()
+	
+	start_calc()
+end
+
+function start_calc()
+	calc_cr=cocreate(calc_view)
 end
 
 function _update()
-	local move=1
+	local move=3
+	
+	while stat(30) do
+		keypress(stat(31))
+	end
+	
+	if calc_cr and costatus(calc_cr)~="dead" then
+		coresume(calc_cr)
+	end
+	
+	local pos=cam.pos:clone()
 
-	if btnp(0) then
-		cam.pos.x-=move
-		calc_view()
-	end
-	
-	if btnp(1) then
-		cam.pos.x+=move
-		calc_view()
-	end
-	
-	if btnp(2) then
-		cam.pos.y+=move
-		calc_view()
-	end
-	
-	if btnp(3) then
-		cam.pos.y-=move
-		calc_view()
+	if (btnp(0)) cam.pos.x-=move
+	if (btnp(1)) cam.pos.x+=move
+	if (btnp(2)) cam.pos.y-=move
+	if (btnp(3)) cam.pos.y+=move
+	if (btnp(4)) cam.pos.z+=move
+	if (btnp(5)) cam.pos.z-=move
+		
+	if not vec3.eq(pos,cam.pos)
+	then
+		start_calc()
 	end
 end
 
 function _draw()
-	cls(12)
+	cls()
 	
 	sspr(0,0,128,128,0,0,128,128)
+	
+	if show_state then
+		print("pos:"..cam.pos.x..","..cam.pos.y..","..cam.pos.z,0,0,7)
+		print("seed:"..seed,0,6,7)
+	end
 	
 	draw_log()
 end
 
-function calc_view()
-	for x=0,127 do
-		for y=0,127 do
-			sset(x,y,0)
-		end
+function keypress(key)
+	if key=="[" then
+		px_delta/=2
+		px_delta=mid(px_delta,1,128)
+		start_calc()
+	elseif key=="]" then
+		px_delta*=2
+		px_delta=mid(px_delta,1,128)
+		start_calc()
 	end
+end
 
+function calc_view()
 	local left,right=-1,1
 	local top,bottom=-1,1
-	local delta=1
+	local delta=px_delta
 	local step=1/(64/delta)
 	
 	local far=50
 	
-	for x=left,right,step do
-		for y=top,bottom,step do
+	for y=top,bottom,step do
+		for x=left,right,step do
 			local origin=vec3:new(
 				{
 					x=x+cam.pos.x,
@@ -89,7 +123,7 @@ function calc_view()
 			local sy=(y+1)/2*127
 							
 			local hit,dist,norm,col=
-				false,32767,nil,0
+				false,32767,nil,12
 				
 			for sp in all(scene.spheres) do
 				local h,d,n,c=
@@ -115,20 +149,32 @@ function calc_view()
 			
 			if hit and dist<=far
 			then
-				local l=vec3.dot(scene.lightdir,norm)
-				if l>0 then
-					col=fade_col(col,l)
-				end
+				local pos=vec3.add(
+					origin,vec3.scale(dirn,dist))
+				local viewdir=vec3.sub(cam.pos,pos):norm()
+				local refldir=vec3.reflect(vec3.neg(scene.lightdir),
+					norm)
+				local diffuse=(vec3.dot(scene.lightdir,norm)+1)/2
+				local ambient=0.1
+				local l=mid(diffuse+ambient,0,1)
+--				local l=diffuse
+				col=fade_col(col,l)
 			end
 			
+			local nsx,nsy=sx+1,sy
+			if nsx>127 then
+				nsx,nsy=0,nsy+delta
+			end
+
+
 			for xx=0,delta-1 do
 				for yy=0,delta-1 do
+					sset(nsx+xx,nsy+yy,10)
 					sset(sx+xx,sy+yy,col)
 				end
 			end
 		end
-		rectfill(0,62,(x+1)*64,66,6)
-		flip()
+
 	end
 end
 
@@ -228,6 +274,23 @@ end
 
 vec3=class({x=0,y=0,z=0})
 
+function vec3:clone()
+	return vec3:new({
+		x=self.x,y=self.y,z=self.z})
+end
+
+function vec3.eq(a,b)
+	return a.x==b.x and
+		a.y==b.y and
+		a.z==b.z
+end
+
+function vec3.neg(v)
+	return vec3:new({x=-v.x,
+		y=-v.y,
+		z=-v.z})
+end
+
 function vec3.sub(a,b)
 	return vec3:new({x=a.x-b.x,
 		y=a.y-b.y,
@@ -262,6 +325,11 @@ function vec3:len()
 	return sqrt(self.x*self.x+
 		self.y*self.y+
 		self.z*self.z)
+end
+
+function vec3.reflect(inc,norm)
+	return vec3.sub(inc,
+		vec3.scale(norm,-vec3.dot(norm,inc)*2))	
 end
 
 function vec3:norm()
