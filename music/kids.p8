@@ -1,17 +1,20 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
 -- kids - mgmt
 -- pico8 cover
 
 
+cols={0xfc,0xbf,0xab,0xca}
+
 function _init()
+	fillp(0xa5a5)
+
 	music(5)
 	vol={0,0,0,0}
 	objs={}
 	queue={}
 	
-	cols={2,8,9,10}
 	idx=1
 	mxct=80
 	for i=1,4 do
@@ -54,7 +57,6 @@ function _update()
 		end
 	end
 	
-	cols={2,8,9,10}
 	idx=1
 	for i=1,4 do
 		local ct=max(flr((mxct-1)*(vol[i]-2)/63),0)
@@ -101,7 +103,7 @@ function _draw()
 	for o in all(queue) do
 		if o.show then
 			circfill(o.sx,o.sy,o.rad,o.col)
-			circfill(o.sx+o.rad/2,o.sy-o.rad/2,o.rad/4-1,7)
+			circfill(o.sx+o.rad/2,o.sy-o.rad/2,o.rad/4-1,0x77)
 			circ(o.sx,o.sy,o.rad,0)
 		end
 	end
@@ -128,7 +130,7 @@ function draw_vol(x,w,v)
 	local vv=v/63
 	
 	for i=0,flr(vv*128),2 do
-		local c=colors[flr(i/127*#colors)+1]
+		local c=cols[flr(i/127*#cols)+1]
 		line(x,127-i,x+w,127-i,c)
 	end
 end

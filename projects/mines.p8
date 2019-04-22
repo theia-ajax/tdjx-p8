@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
 
 -- mines.p8
@@ -390,7 +390,7 @@ function _init()
 	settings = {
 		w = 16,
 		h = 16,
-		mct = 75,
+		mct = 35,
 	}
 
 	mouse = {}

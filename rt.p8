@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
 show_state=false
 px_delta=4
@@ -24,7 +24,7 @@ function _init()
 	scene.planes={}
 	scene.lightdir=vec3:new({x=0.5,y=-1,z=0.1}):norm()
 	
-	for i=0,0 do
+	for i=0,8 do
 		add(scene.spheres,sphere:new(
 			{center=vec3:new({
 					x=rnd(20)-10,y=rnd(20)-10,z=10+i*2}),
