@@ -162,6 +162,10 @@ function keypress(key)
 		b.angle=7/8
 	elseif key=="u" then
 		next_powerup(64,64)
+	elseif key=="y" then
+		add_ufo(-16,16,1)
+	elseif key=="w" then
+		blocks={}
 	end
 end
 
@@ -183,49 +187,7 @@ function play_init()
 	cam_shake_mag=0
 	cam_shake_t=0
 	
-	blocks={}
-	
-	local power_ct=0
-	
-	for y=0,15 do
-		for x=0,15 do
-			local m=mget(x,y)
-		
-			local col=12
-			local hits=1
-			local btype=0
-			
-			if m==22 then
-				btype=1
-				power_ct+=1
-			else
-				hits=m-19+1
-			end
-			
-			if m~=0 then
-				add(blocks,{
-					x=(x+1)*k_block_width*2,
-					y=(y+1)*k_block_height*2,
-					w=k_block_width,
-					h=k_block_height,
- 				hits=hits,
-					btype=btype,
-					kick_t=0,
-					kick_dur=0.15,
-					kick_ang=0,
-					kick_mag=3,
-				})
-			end
-		end
-	end
-	
-	powers={}
-	powers_n=power_ct
-	for i=1,powers_n do
-		add(powers,rnd_wt(k_powerup_weights))
-	end
-	shuffle(powers)
-	power_idx=0
+	init_blocks()
 	
 	paddle={
 		x=64,y=121,
@@ -268,6 +230,7 @@ function play_init()
 	powerups={}
 	
 	lazers={}
+	ufos={}
 	
 	text_fx={}
 	
@@ -287,6 +250,55 @@ function play_init()
 	sequence(seq_play_intro)
 end
 
+function init_blocks(mx,my)
+	mx=mx or 0
+	my=my or 0
+
+	blocks={}
+	
+	local power_ct=0
+	
+	for y=0,15 do
+		for x=0,15 do
+			local m=mget(mx+x,my+y)
+		
+			local col=12
+			local hits=1
+			local btype=0
+			
+			if m==22 then
+				btype=1
+				power_ct+=1
+			else
+				hits=m-19+1
+			end
+			
+			if m~=0 then
+				add(blocks,{
+					x=(x+1)*k_block_width*2,
+					y=(y+1)*k_block_height*2,
+					w=k_block_width,
+					h=k_block_height,
+ 				hits=hits,
+					btype=btype,
+					kick_t=0,
+					kick_dur=0.15,
+					kick_ang=0,
+					kick_mag=3,
+				})
+			end
+		end
+	end
+	
+	powers={}
+	powers_n=power_ct
+	for i=1,powers_n do
+		add(powers,rnd_wt(k_powerup_weights))
+	end
+	shuffle(powers)
+	power_idx=0
+end
+
 function seq_play_intro()
 	play_lock=true
 	
@@ -294,7 +306,7 @@ function seq_play_intro()
 	ui.message.show=true
 	ui.message.text="ready"
 	
-	wait_sec(2)
+	wait_sec(0.2)
 	
 	ui.pause_fx.show=false
 	ui.message.show=false
@@ -303,11 +315,54 @@ function seq_play_intro()
 end
 
 function seq_round_loss()
+	play.lives-=1
+	
 	ui.pause_fx.show=true
 
 	play_lock=true
 	powerups={}
 	lazers={}
+
+	paddle.paused=true
+	paddle.dx=0
+	paddle.face=1
+
+	wait_sec(0.25)
+	
+	ui.message.text="lives: "..play.lives
+	ui.message.show=true
+	
+	local dx=0
+	while paddle.x~=64 do
+		paddle.x,dx=damp(paddle.x,
+			64,
+			dx,
+			0.3)
+		yield()
+	end
+	
+	paddle.paused=false
+	paddle.shots=0
+	paddle.wide_t=0
+	
+	
+	
+	wait_sec(1)
+	
+	add_start_ball()
+	
+	play_lock=false
+	ui.pause_fx.show=false
+	ui.message.show=false
+end
+
+function seq_round_win()
+	ui.pause_fx.show=true
+	ui.message.show=true
+	ui.message.text="win"
+
+	play_lock=true
+	
 
 	paddle.paused=true
 	paddle.dx=0
@@ -326,14 +381,31 @@ function seq_round_loss()
 	
 	paddle.paused=false
 	paddle.shots=0
+	paddle.shot_t=0
 	paddle.wide_t=0
 	
 	wait_sec(0.25)
 	
+	local remall=function(a)
+		for e in all(a) do
+			del(a,e)
+			wait_sec(0.1)
+		end
+	end
+	remall(powerups)
+	remall(lazers)
+	remall(balls)
+	
 	add_start_ball()
+	init_blocks()
+	
+	
+	
+	wait_sec(0.5)
 	
 	play_lock=false
 	ui.pause_fx.show=false
+	ui.message.show=false
 end
 
 function add_start_ball() add_ball(64,0,0,paddle,0,-3) end
@@ -455,7 +527,8 @@ function play_update(dt)
 	
 	if paddle.shots>0 and
 		paddle.stick_n<=0 and
-		paddle.shot_t<=0
+		paddle.shot_t<=0 and
+		not play_lock
 	then
 		local left=topleft(paddle)
 		local right=botright(paddle)
@@ -466,192 +539,210 @@ function play_update(dt)
 	end
 	
 	----------------
-	-- update lazers
-	
-	foreach(lazers,function(l)
-		if not l.target then
-			local best=32767
-			local select=nil
-			for _,b in pairs(blocks) do
-				local dx=b.x-l.x
-				local dy=b.y-l.y
-				local d2=dx*dx+dy*dy
-				if d2>0 and d2<1024 and d2<best then
-					best=d2
-					select=b
-				end
-			end
-
-			l.target=select
-		else
-			local tang=angle_to(l.x,l.y,
-				l.target.x,l.target.y)
-
-			l.head=moveto_angle(
-				l.head,tang,l.turn_rate*dt)			
-
-			if l.target.hits<=0 then
-			 l.target=nil
-			end
-		end
-
-		local dx,dy=direction(l.head)
-		l.x+=dx*dt*l.speed
-		l.y+=dy*dt*l.speed
-
-		for i=5,1,-1 do
-			l.trail[i]=l.trail[i-1]
-		end
-		l.trail[1]={x=l.x,y=l.y}
-		
-		l.t_life-=dt
-		if (l.t_life<=0) del(lazers,l)
-		
-		foreach(blocks,function(b)
-			if rect_coll(l,b) then
-				del(lazers,l)
-				block_hit(b)
+	-- update ufos
+	if not play_lock then
+		foreach(ufos,function(ufo)
+			ufo.t+=dt
+			ufo.x+=ufo.face*32*dt
+			
+			ufo.y=32+cos(ufo.t/6)*16
+			if ufo.t>5 then
+				del(ufos,ufo)
 			end
 		end)
-	end)
-		
-	---------------
-	-- update balls
-	foreach(balls,function(ball)
-		if ball.stop_f>0 then
-			ball.stop_f-=1
-			return
-		end
-		
-		if not ball.stuck and rnd()<0.2 then
-			local ang=ball.angle+0.42+rnd(0.16)
-			add_particle({
-				x=ball.x-ball.w+rnd(ball.w*2),y=ball.y-ball.h+rnd(ball.h*2),
-				dx=cos(ang)*ball.speed/8,
-				dy=sin(ang)*ball.speed/8,
-				--ddy=200,
-				col=6,
-				life_t=1,
-			})
-		end
+	end
 	
-		if ball.stuck then
-			ball.x=ball.stuck.x+ball.soffx
-			ball.y=ball.stuck.y+ball.soffy
-		else
-			if ball.super_t>0 then
-				ball.super_t-=dt
-				ball.w=ball.super_w
-				ball.h=ball.super_h
-			else
-				ball.w=ball.norm_w
-				ball.h=ball.norm_h
-			end
-		
-			local dx,dy=direction(ball.angle)
-			
-			if ball.speed>ball.max_speed then
-				ball.speed=ball.max_speed
-			end
-			
-			if ball.speed>ball.norm_speed then
-				ball.speed=moveto(ball.speed,
-					ball.norm_speed,
-					ball.speed_decay*dt)
-			end
-			
-			ball.x+=dx*dt*ball.speed
-			ball.y+=dy*dt*ball.speed
-			
-			if ball.y<110 then
-				ball.has_bounced=false
-			end
-					
-			if ball.x<ball.w then
-				ball.x=ball.w
-				ball_bounce(ball,1)
-			end
-			
-			if ball.x>128-ball.w then
-				ball.x=128-ball.w
-				ball_bounce(ball,0)
-			end
-			
-			if ball.y<ball.h then
-				ball.y=ball.h
-				ball_bounce(ball,3)
-			end
+	----------------
+	-- update lazers
 	
-			if play.shield_level>0 or
-				cheat_no_death
-			then
-				local boty=128-min(play.shield_level,3)-ball.h
-				if ball.y>boty then
-					ball.y=boty
-					ball_bounce(ball,2)
-					play.shield_level=max(play.shield_level-1,0)
-				end
-			end
-			
-			if ball.y>148+ball.h then
-				del(balls,ball)
-			end
-			
-			local hit,side,pos=rect_coll(paddle,ball)
-			if hit then
-				if side<2 then
-					ball.x=pos
-				else
-					ball.y=pos
-				end
-				ball_bounce(ball,side)
-				
-				if side~=3 then
-					-- paddle bounce
-					ball_bounce(ball,2)
-					if not ball.has_bounced then
-						ball.has_bounced=true
-						local locf=(ball.x-paddle.x)/paddle.w
-						local spdf=paddle.sfrac
-						local locang=lerp(k_max_ball_angle,k_min_ball_angle,(locf+1)/2)
-						local spdang=ball.angle-0.1*spdf
-						ball.angle=mid((locang+spdang)/2,
-							k_min_ball_angle,
-							k_max_ball_angle)
-						local accel=lerp(30,100,abs(paddle.sfrac))
-						ball.speed+=accel
+	if not play_lock then
+		foreach(lazers,function(l)
+			if not l.target then
+				local best=32767
+				local select=nil
+				for _,b in pairs(blocks) do
+					local dx=b.x-l.x
+					local dy=b.y-l.y
+					local d2=dx*dx+dy*dy
+					if d2>0 and d2<1024 and d2<best then
+						best=d2
+						select=b
 					end
 				end
+	
+				l.target=select
+			else
+				local tang=angle_to(l.x,l.y,
+					l.target.x,l.target.y)
+	
+				l.head=moveto_angle(
+					l.head,tang,l.turn_rate*dt)			
+	
+				if l.target.hits<=0 then
+				 l.target=nil
+				end
+			end
+	
+			local dx,dy=direction(l.head)
+			l.x+=dx*dt*l.speed
+			l.y+=dy*dt*l.speed
+	
+			for i=5,1,-1 do
+				l.trail[i]=l.trail[i-1]
+			end
+			l.trail[1]={x=l.x,y=l.y}
+			
+			l.t_life-=dt
+			if (l.t_life<=0) del(lazers,l)
+			
+			foreach(blocks,function(b)
+				if rect_coll(l,b) then
+					del(lazers,l)
+					block_hit(b)
+				end
+			end)
+		end)
+	end
+	
+	---------------
+	-- update balls
+	if not play_lock then
+		foreach(balls,function(ball)
+			if ball.stop_f>0 then
+				ball.stop_f-=1
+				return
 			end
 			
-			-- ball hit blocks
-			for b in all(blocks) do
-				local hit,side,pos=rect_coll(b,ball)
+			if not ball.stuck and rnd()<0.2 then
+				local ang=ball.angle+0.42+rnd(0.16)
+				add_particle({
+					x=ball.x-ball.w+rnd(ball.w*2),y=ball.y-ball.h+rnd(ball.h*2),
+					dx=cos(ang)*ball.speed/8,
+					dy=sin(ang)*ball.speed/8,
+					--ddy=200,
+					col=6,
+					life_t=1,
+				})
+			end
+		
+			if ball.stuck then
+				ball.x=ball.stuck.x+ball.soffx
+				ball.y=ball.stuck.y+ball.soffy
+			else
+				if ball.super_t>0 then
+					ball.super_t-=dt
+					ball.w=ball.super_w
+					ball.h=ball.super_h
+				else
+					ball.w=ball.norm_w
+					ball.h=ball.norm_h
+				end
+			
+				local dx,dy=direction(ball.angle)
+				
+				if ball.speed>ball.max_speed then
+					ball.speed=ball.max_speed
+				end
+				
+				if ball.speed>ball.norm_speed then
+					ball.speed=moveto(ball.speed,
+						ball.norm_speed,
+						ball.speed_decay*dt)
+				end
+				
+				ball.x+=dx*dt*ball.speed
+				ball.y+=dy*dt*ball.speed
+				
+				if ball.y<110 then
+					ball.has_bounced=false
+				end
+						
+				if ball.x<ball.w then
+					ball.x=ball.w
+					ball_bounce(ball,1)
+				end
+				
+				if ball.x>128-ball.w then
+					ball.x=128-ball.w
+					ball_bounce(ball,0)
+				end
+				
+				if ball.y<ball.h then
+					ball.y=ball.h
+					ball_bounce(ball,3)
+				end
+		
+				if play.shield_level>0 or
+					cheat_no_death
+				then
+					local boty=128-min(play.shield_level,3)-ball.h
+					if ball.y>boty then
+						ball.y=boty
+						ball_bounce(ball,2)
+						play.shield_level=max(play.shield_level-1,0)
+					end
+				end
+				
+				if ball.y>148+ball.h then
+					del(balls,ball)
+				end
+				
+				local hit,side,pos=rect_coll(paddle,ball)
 				if hit then
-					local mag=4-b.hits
-					
-					block_hit(b,ball.super_t>0,side)
-					
-					if (ball.super_t>0) ball.super_t-=super_hit_decay
-									
-					ball.speed+=10
 					if side<2 then
 						ball.x=pos
 					else
 						ball.y=pos
 					end
+					ball_bounce(ball,side)
 					
-					if ball.super_t<=0 then
-						ball_bounce(ball,side)
-					else
-						ball.stop_f=3
+					if side~=3 then
+						-- paddle bounce
+						ball_bounce(ball,2)
+						if not ball.has_bounced then
+							ball.has_bounced=true
+							local locf=(ball.x-paddle.x)/paddle.w
+							local spdf=paddle.sfrac
+							local locang=lerp(k_max_ball_angle,k_min_ball_angle,(locf+1)/2)
+							local spdang=ball.angle-0.1*spdf
+							ball.angle=mid((locang+spdang)/2,
+								k_min_ball_angle,
+								k_max_ball_angle)
+							local accel=lerp(30,100,abs(paddle.sfrac))
+							ball.speed+=accel
+						end
 					end
-					camera_shake(3/60,mag/2)
-					break
+				end
+				
+				-- ball hit blocks
+				for b in all(blocks) do
+					local hit,side,pos=rect_coll(b,ball)
+					if hit then
+						local mag=4-b.hits
+						
+						block_hit(b,ball.super_t>0,side)
+						
+						if (ball.super_t>0) ball.super_t-=super_hit_decay
+										
+						ball.speed+=10
+						if side<2 then
+							ball.x=pos
+						else
+							ball.y=pos
+						end
+						
+						if ball.super_t<=0 then
+							ball_bounce(ball,side)
+						else
+							ball.stop_f=3
+						end
+						camera_shake(3/60,mag/2)
+						break
+					end
 				end
 			end
-		end
-	end)
+		end)
+	end
 	
 	foreach(blocks,function(b)
 		if (b.kick_t>0) b.kick_t-=dt
@@ -659,19 +750,20 @@ function play_update(dt)
 	
 	------------------
 	-- update powerups
-	
-	foreach(powerups,function(p)
-		p.t0+=dt
-		p.y+=45*dt
-		if p.y>128+p.h then
-			del(powerups,p)
-		end
-		
-		if rect_coll(p,paddle) then
-			del(powerups,p)
-			paddle_powerup(paddle,p.ptype)
-		end
-	end)
+	if not play_lock then
+		foreach(powerups,function(p)
+			p.t0+=dt
+			p.y+=45*dt
+			if p.y>128+p.h then
+				del(powerups,p)
+			end
+			
+			if rect_coll(p,paddle) then
+				del(powerups,p)
+				paddle_powerup(paddle,p.ptype)
+			end
+		end)
+	end
 	
 	----------------------
 	-- update text effects
@@ -687,7 +779,15 @@ function play_update(dt)
 	-- win/lose conditions
 	if not play_lock then
 		if #balls==0 then
-			sequence(seq_round_loss)
+			if play.lives>0 then
+				sequence(seq_round_loss)
+			else
+				sequence(seq_game_over)
+			end
+		end
+		
+		if #blocks==0 then
+			sequence(seq_round_win)
 		end
 	end
 end
@@ -708,25 +808,21 @@ ptns={ptns1,ptns2}
 
 ptns={
 	{0xcc33,0x3cc3,0x33cc,0xc33c}, -- d
---	{0xcc33,0x6996,0xcc33,0x6996}, -- dl
+	{0xcc33,0x6996,0xcc33,0x6996}, -- dl
 	{0xcc33,0x9966,0x33cc,0x6699}, -- l
---	{0xcc33,0x9669,0xcc33,0x9669}, -- ul
+	{0xcc33,0x9669,0xcc33,0x9669}, -- ul
 	{0xcc33,0xc33c,0x33cc,0x3cc3}, -- u
---	{0xcc33,0x6996,0xcc33,0x6996}, -- ur
+	{0xcc33,0x6996,0xcc33,0x6996}, -- ur
 	{0xcc33,0x6699,0x33cc,0x9966}, -- r
---	{0xcc33,0x9669,0xcc33,0x9669}, -- dr
+	{0xcc33,0x9669,0xcc33,0x9669}, -- dr
 }
 
 function play_draw()
 	cls(1)
---	local ptn=ptns[flr((t()*1)%#ptns)+1]
+--	local ptn=ptns[flr((t()*0.1)%#ptns)+1]
 --	fillp(ptn[flr((t()*30)%#ptn)+1])
 --	rectfill(0,0,127,127,0x10)
 --	
---	srand()
---	for i=0,9 do
---		circfill(rnd(128),rnd(128),64+sin(t()/2)*24,8+flr(rnd(7)))
---	end
 --	
 --	fillp()
 	
@@ -843,6 +939,12 @@ function play_draw()
 ]]
 	end
 
+	-- draw ufos
+	foreach(ufos,function(ufo)
+		local sp=32+flr(ufo.t*16)%4
+		local tlx,tly=topleft(ufo)
+		spr(sp,tlx,tly)
+	end)
 
 	-- draw balls
 	foreach(balls,function(ball)
@@ -1025,14 +1127,17 @@ function block_hit(b,kill,side)
 	kx*=-20
 	ky*=-20
 	
-	for i=1,15 do
+	for i=1,7 do
 		local pc=partcol
 		if (chance(0.1) and pc~=13) pc=7
+		local sz=0
+		if (chance(0.5)) sz=1
 		add_particle({
 			x=b.x-b.w+rnd(b.w*2),y=b.y-b.h+rnd(b.h*2),
 			dx=rnd(30)-15+kx,dy=-rnd(30)+ky,
 			ddy=200,
-			col=pc
+			col=pc,
+			w=sz,h=sz,
 		})
 	end
 	
@@ -1188,6 +1293,14 @@ super_dur=6
 super_hit_decay=0.25
 
 
+function add_ufo(x,y,face)
+	return add(ufos,{
+		x=x or 0,y=y or 16,w=4,h=4,
+		face=face or 1,
+		t=0,r=rnd(),
+	})
+end
+
 function add_text_fx(msg,x,y,col)
 	return add(text_fx,{
 		msg=msg,x=x,y=y,t=0.8,col=col,
@@ -1213,7 +1326,7 @@ function topleft(o)
 end
 
 function botright(o)
-	return o.x+o.w-1,o.y+o.h-1
+	return o.x+max(o.w-1,0),o.y+max(o.h-1,0)
 end
 
 function rect_coll(a,b)
@@ -1262,18 +1375,22 @@ function rect_coll(a,b)
 	return false
 end
 
+particle={
+	x=0,y=0,z=0,
+	w=0,h=0,
+	dx=0,dy=0,dz=0,
+	ddx=0,ddy=0,ddz=0,
+	col=7,
+	life_t=2,
+}
+
+function particle:new(p)
+	self.__index=self
+	return setmetatable(p or {},self)
+end
+
 function add_particle(p)
-	local pp={
-		x=0,y=0,z=0,
-		dx=0,dy=0,dz=0,
-		ddx=0,ddy=0,ddz=0,
-		col=7,
-		life_t=2,
-	}
-	for k,v in pairs(p) do
-		pp[k]=v
-	end
-	return add(particles,pp)
+	return add(particles,particle:new(p))
 end
 
 function update_particles()
@@ -1294,7 +1411,9 @@ end
 
 function draw_particles()
 	foreach(particles,function(p)
-		pset(p.x,p.y,p.col)
+		local tlx,tly=topleft(p)
+		local brx,bry=botright(p)
+		rectfill(tlx,tly,brx,bry,p.col)
 	end)
 end
 
@@ -1430,11 +1549,11 @@ __map__
 0013131300131515151300131313000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0013131300131313131300131313000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0013161300161313131600131613000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0013131600161316131600161313000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0013131300151316131500131313000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000013131414130000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0013131313000000000014141616140000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0016131316000000000013131515130000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000151500000000000000151500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0015161615000000000015161615000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000151500000000000000151500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
