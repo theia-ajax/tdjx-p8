@@ -1,6 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
+#include util.p8
+
 function _init()
 	palettes={
 		default={
@@ -26,16 +28,17 @@ function _init()
 end
 
 function _update()
+	clear_watches()
+
 	dt=1/30
 
-	local ix,iy=0,0
+	local ix,iy=input_xy()
 	
-	if (btn(0)) ix-=1
-	if (btn(1)) ix+=1
-	if (btn(2)) iy-=1
-	if (btn(3)) iy+=1
-	
+	for i=0,6 do
+		watch((i+1)..") "..tostr(btn(i)))
+	end
 	local accel=200
+
 	if ix~=0 then
 		if sgn(ix)~=sgn(player.dx) then
 			accel*=2
@@ -55,7 +58,7 @@ function _update()
 	
 	player.x+=player.dx*dt
 	player.y+=player.dy*dt
-	
+
 	river_w=84
 	
 	local left=flr(64-river_w/2)
@@ -83,16 +86,17 @@ function _draw()
 	
 	spr(sp,player.x-player.w,
 		player.y-player.h,2,2)
-	
+		
 		
 	local left=flr(64-river_w/2)
 	local right=ceil(64+river_w/2)
 	line(left,0,left,127,7)
 	line(right,0,right,127,7)
+	
+	draw_watches()
 end
 
-_sgn=sgn
-function sgn(v) if v==0 then return 0 else return _sgn(v) end end
+
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000008888888888888888888888888888888800000000000000000000000000000000000000000000000000000000000000000000000000000000
