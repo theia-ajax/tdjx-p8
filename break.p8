@@ -187,8 +187,6 @@ function play_init()
 	cam_shake_mag=0
 	cam_shake_t=0
 	
-	init_blocks()
-	
 	paddle={
 		x=64,y=121,
 		dx=0,
@@ -288,6 +286,7 @@ function init_blocks(mx,my)
 				})
 			end
 		end
+		wait_sec(0.1)
 	end
 	
 	powers={}
@@ -302,11 +301,13 @@ end
 function seq_play_intro()
 	play_lock=true
 	
+		init_blocks()
+	
 	ui.pause_fx.show=true
 	ui.message.show=true
 	ui.message.text="ready"
 	
-	wait_sec(0.2)
+	wait_sec(2)
 	
 	ui.pause_fx.show=false
 	ui.message.show=false
@@ -356,6 +357,9 @@ function seq_round_loss()
 	ui.message.show=false
 end
 
+function seq_game_over()
+end
+
 function seq_round_win()
 	ui.pause_fx.show=true
 	ui.message.show=true
@@ -385,23 +389,16 @@ function seq_round_win()
 	paddle.wide_t=0
 	
 	wait_sec(0.25)
+
+	powerups={}
+	lazers={}
+	balls={}	
 	
-	local remall=function(a)
-		for e in all(a) do
-			del(a,e)
-			wait_sec(0.1)
-		end
-	end
-	remall(powerups)
-	remall(lazers)
-	remall(balls)
-	
-	add_start_ball()
-	init_blocks()
-	
-	
+	init_blocks()	
 	
 	wait_sec(0.5)
+	
+	add_start_ball()
 	
 	play_lock=false
 	ui.pause_fx.show=false
@@ -789,6 +786,11 @@ function play_update(dt)
 		if #blocks==0 then
 			sequence(seq_round_win)
 		end
+	end
+	
+	local tr=min(flr(t()*16),0x2000)
+	for i=1,tr do
+		poke(flr(rnd(tr))+0x6000,flr(rnd(16)))
 	end
 end
 
@@ -1464,6 +1466,12 @@ function ln(v)
 end
 -->8
 -- todo/notes
+
+-- trails on balls instead of particles
+-- ufo collision, powerup spawn, movement
+-- ball min/max speed changes, paddle hit ball speed increase changes
+-- 
+
 
 --------
 -- notes

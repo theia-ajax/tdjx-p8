@@ -1,6 +1,9 @@
 pico-8 cartridge // http://www.pico-8.com
 version 18
 __lua__
+fps30_dt=0x0000.0888
+fps60_dt=0x0000.0444
+
 _sgn=sgn
 function sgn(a)
  if (a==0) return 0
@@ -317,6 +320,12 @@ function m01(v)
  return mid(v,0,1)
 end
 
+function ilerp(a,b,c)
+	local d=b-a
+	if (d==0) return 0
+	return (c-a)/d
+end
+
 function lerp(a,b,t)
  return a+(b-a)*t
 end
@@ -327,6 +336,111 @@ function lerp_angle(a,b,t)
  return a+d*m01(t)
 end
 
+function set(a,b)
+	a=a or {}
+	b=b or {}
+	for k,v in pairs(b) do
+		a[k]=v
+	end
+	return a
+end
+
+function class(clob)
+	clob=clob or {}
+	setmetatable(clob,
+		{__index=clob.extends})
+	clob.new=function(self,ob)
+		ob=set(ob,{class=clob})
+		setmetatable(ob,{__index=clob})
+		if (clob.create) clob:create()
+		return ob
+	end
+	return clob
+end
+
+function topleft(o)
+	return o.x-o.w,o.y-o.h
+end
+
+function botright(o)
+	return o.x+max(o.w-1,0),o.y+max(o.h-1,0)
+end
+
+function rect_draw(r,c,f)
+	f=f or rect
+	local x1,y1=topleft(r)
+	local x2,y2=botright(r)
+	f(x1,y1,x2,y2,c)
+end
+
+function rect_coll(a,b)
+	-- calculates minkowski sum
+	-- of rectangles
+	-- determines if collision
+	-- occurs and on what side
+	-- side is number based on
+	-- btn inputs
+	-- side: 0 left
+	--       1 right
+	--       2 top
+	--       3 bottom
+	
+	-- returns:
+	--		hit: bool, true if collision detected
+	--		side: side the hit occurs on
+	--		position: position on outside edge of collision
+
+	local w=a.w+b.w
+	local h=a.h+b.h
+	
+	local dx=a.x-b.x
+	local dy=a.y-b.y
+	
+	if abs(dx)<=w and abs(dy)<=h then
+		local wy=w*dy
+		local hx=h*dx*0.75
+		
+		local side
+		local position
+		if wy>hx then
+			if wy>-hx then
+				side=2
+				position=a.y-a.h-b.h
+			else
+				side=1
+				position=a.x+a.w+b.w
+			end
+		else
+			if wy>-hx then
+				side=0
+				position=a.x-a.w-b.w
+			else
+				side=3
+				position=a.y+a.h+b.h
+			end
+		end
+		return true,side,position
+	end
+	return false
+end
+
+function len(x,y)
+	return sqrt(x*x+y*y)
+end
+
+function norm(x,y)
+	local l=len(x,y)
+	if (l>0) return x/l,y/l
+	return 0,0
+end
+
+function midp(x1,y1,x2,y2)
+	return (x1+x2)/2,(y1+y2)/2
+end
+
+function dot(x1,y1,x2,y2)
+	return x1*x2+y1*y2
+end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
