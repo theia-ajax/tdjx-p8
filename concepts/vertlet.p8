@@ -2,8 +2,10 @@ pico-8 cartridge // http://www.pico-8.com
 version 18
 __lua__
 function _init()
+	poke(0x5f2d,1)
+
 	net={
-		x=32,y=8,
+		x=stat(32),y=stat(33),
 		w=8,h=8,
 		space=8,
 		pts={},
@@ -21,7 +23,7 @@ function _init()
 			
 			local pinx,piny=nil,nil
 			
-			if (y==0) pinx,piny=px,py
+			if (y==0) pinx,piny=px-net.x,py-net.y
 
 			add(net.pts,{
 				x=px,y=py,		-- pos
@@ -29,6 +31,11 @@ function _init()
 				dx=0,dy=0,		-- velocity
 				ddx=0,ddy=20,-- accel
 				pinx=pinx,piny=piny, -- pin
+				mass=10,
+				force=function(self,fx,fy)
+					self.ddx+=fx/self.mass
+					self.ddy+=fy/self.mass
+				end
 			})
 		end
 	end
@@ -39,8 +46,8 @@ function _init()
 		return add(net.links,{
 			a=a,b=b,
 			rest=net.space,
-			tear=8,
-			stiff=0.5,
+			tear=64,
+			stiff=0.4,
 		})
 	end
 	
@@ -58,32 +65,55 @@ end
 function _update()
 	dt=1/30
 	
+	net.x,net.y=stat(32),stat(33)
 	
-	for i=1,6 do
-	for link in all(net.links) do
-		local p1,p2=link.a,link.b
+	local ix,iy=0,0
+	
+	if (btn(0)) ix-=1
+	if (btn(1)) ix+=1
+	if (btn(2)) iy-=1
+	if (btn(3)) iy+=1
+	
+	for pt in all(net.pts) do
+		pt:force(0,9.8*pt.mass)
 		
-		local dx,dy=p1.x-p2.x,
-			p1.y-p2.y
-			
-		local d=sqrt(dx*dx+dy*dy)
+		pt:force(ix*10,0)
 		
-		local diff=(link.rest-d)/d
-		
-		local tx=dx*0.5*diff
-		local ty=dy*0.5*diff
-		
-		p1.x+=tx
-		p1.y+=ty
-
-		p2.y-=tx
-		p2.y-=ty
 	end
+	
+--	net.y=8+sin(t())*8
+--	net.x=32+sin(t()/4)*16
+	
+	for i=1,16 do
+		for link in all(net.links) do
+			local p1,p2=link.a,link.b
+			
+			local dx,dy=p1.x-p2.x,
+				p1.y-p2.y
+				
+			local d=sqrt(dx*dx+dy*dy)
+		
+			if (d>=link.tear) then
+				del(net.links,link)
+			end
+			
+			local diff=(link.rest-d)/d
+				
+			local tx=dx*link.stiff*diff
+			local ty=dy*link.stiff*diff
+			
+			p1.x+=tx
+			p1.y+=ty
+	
+			p2.y-=tx
+			p2.y-=ty
+		
+		end
 	end
 	
 	for pt in all(net.pts) do
-		pt.ddx*=0.9
-		pt.ddy*=0.9
+		pt.dx*=0.99
+		pt.dy*=0.99
 	
 		pt.dx=pt.x-pt.lx
 		pt.dy=pt.y-pt.ly
@@ -94,12 +124,10 @@ function _update()
 		pt.x=pt.x+pt.dx+pt.ddx*dt
 		pt.y=pt.y+pt.dy+pt.ddy*dt
 		
-		if (pt.pinx) pt.x=pt.pinx
-		if (pt.piny) pt.y=pt.piny
+		if (pt.pinx) pt.x=pt.pinx+net.x
+		if (pt.piny) pt.y=pt.piny+net.y
 		
-		if pt.pinx and pt.piny then
-			pt.piny=net.y+sin(t())*8
-		end
+		pt.ddx,pt.ddy=0,0
 	end
 
 end
@@ -107,9 +135,6 @@ end
 function _draw()
 	cls()
 
-	for pt in all(net.pts) do
-		pset(pt.x,pt.y,7)
-	end
 	
 	for link in all(net.links) do
 		local a,b=link.a,link.b
@@ -117,8 +142,12 @@ function _draw()
 		local col=12
 		
 		line(a.x,a.y,b.x,b.y,col)
-		pset(b.x,b.y,10)
 	end
+	
+	for pt in all(net.pts) do
+		pset(pt.x,pt.y,7)
+	end
+
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
