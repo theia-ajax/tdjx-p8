@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 18
 __lua__
 
 function is_dev() return peek(0x5f2d)~=0 end
@@ -285,7 +285,7 @@ end
 
 function make_inp(p)
 	local p=p or {}
-	return {x=p.x or 0,y=p.y or 0,bx=p.bx or false,by=p.by or false}
+	return {x=p.x or 0,y=p.y or 0,btns=p.btns or 0}
 end
 
 -- actor flags

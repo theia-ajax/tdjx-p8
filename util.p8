@@ -393,17 +393,50 @@ function rnd_elem(a)
 	local n=#a
 	return a[flr(rnd(n))+1]
 end
+
+-- xorshift16 sort of
+function rgen(seed,ct)
+	seed=seed or 1
+	ct=ct or 0
+	local ret={
+		seed=seed,
+		sx=seed,
+		count=0,
+		_next=function(self)
+			self.count+=1
+			self.sx=bxor(self.sx,shl(self.sx,7))
+			self.sx=bxor(self.sx,shr(self.sx,9))
+			self.sx=bxor(self.sx,shl(self.sx,8))
+			return self.sx
+		end,
+		next=function(self,mn,mx)
+			if not mn then
+			 mn,mx=0,1
+			elseif not mx then
+				mx,mn=mn,0
+			elseif mx<mn then
+				mn,mx=mx,mn
+			end
+			
+			local f=(self:_next()/32767+1)/2
+			return f*(mx-mn)+mn
+		end,
+		reset=function(self,ct)
+			self.state=self.seed
+			self.count=0
+			for i=1,ct do
+				self:next()
+			end
+		end,
+		clone=function(self)
+			return rgen(self.seed,self.count)
+		end
+	}
+	for i=1,ct do ret:next() end
+	return ret
+end
 -->8
 -- class
-
-function set(a,b)
-	a=a or {}
-	b=b or {}
-	for k,v in pairs(b) do
-		a[k]=v
-	end
-	return a
-end
 
 function class(clob)
 	clob=clob or {}
@@ -421,22 +454,51 @@ end
 -->8
 -- general utility
 
-function input_xy(player)
-	player=player or 0
+function input_xy(pid)
+	pid=pid or 0
 
 	local ix,iy=0,0
 	
-	if (btn(0,player)) ix-=1
-	if (btn(1,player)) ix+=1
-	if (btn(2,player)) iy-=1
-	if (btn(3,player)) iy+=1
+	if (btn(0,pid)) ix-=1
+	if (btn(1,pid)) ix+=1
+	if (btn(2,pid)) iy-=1
+	if (btn(3,pid)) iy+=1
 	
 	return ix,iy
+end
+
+function input_btns(pid)
+	pid=pid or 0
+	local bt=0
+	if (btnp(4,pid)) bt+=1
+	if (btnp(5,pid)) bt+=2
+	if (btn(4,pid)) bt+=4
+	if (btn(5,pid)) bt+=8
+	return bt
 end
 
 function blink(ivl,tt)
 	tt=tt or t()
 	return flr((tt*2)/ivl)%2==0
+end
+
+function set(a,b)
+	a=a or {}
+	b=b or {}
+	for k,v in pairs(b) do
+		a[k]=v
+	end
+	return a
+end
+
+function clone(a,b)
+	local ret=set({},a)
+	return set(ret,b)
+end
+
+function viewport()
+	return cam.x-64,cam.y-64,
+		cam.x+192,cam.y+192
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
