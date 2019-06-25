@@ -496,9 +496,11 @@ function clone(a,b)
 	return set(ret,b)
 end
 
-function viewport()
-	return cam.x-64,cam.y-64,
-		cam.x+192,cam.y+192
+function viewport(extx,exty)
+	extx=flr((extx or 0)/2)
+	exty=flr((exty or 0)/2)
+	return cam.x-extx,cam.y-exty,
+		cam.x+extx+128,cam.y+exty+128
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

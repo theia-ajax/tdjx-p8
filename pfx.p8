@@ -19,7 +19,7 @@ function pfx_init()
 end
 
 function pfx_add(p)
-	local vx1,vy1,vx2,vy2=viewport()
+	local vx1,vy1,vx2,vy2=viewport(16,16)
 	if p.x>=vx1 and p.y>=vy1 and
 		p.x<=vx2 and p.y<=vy2
 	then

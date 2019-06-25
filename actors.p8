@@ -22,12 +22,14 @@ actor=class({
 	w=0.2,h=0.5, -- half width/height
 	mass=1,
 	sp=1,
+	sw=1,sh=1,
 	face=1,
 	flags=0,
 	jumps=0,
 	t_air=0,
 	t_jump_hold=0,
 	t_plat_drop=0,
+	t0=0,
 	k_accel=64,
 	k_coldst=0.3, -- collision check distance
 	k_scndst=0.1, -- scan distance while searching for contact point
@@ -77,6 +79,12 @@ function actor:control(ix,iy,ibtns,dt)
 	end
 
 	local fx=0
+	
+	if ix~=0 and stand then
+		self.t0+=dt
+	else
+		self.t0=0.5
+	end
 
 	if ix<0 then
 		fx-=accel
@@ -127,6 +135,10 @@ function actor:control(ix,iy,ibtns,dt)
 end
 
 function actor:move(dt)
+	if self.behavior then
+		self:behavior(dt)
+	end
+
 	-- do physics
 	if not self:getf(af.grounded) then
 		local pdy=self.dy
@@ -299,12 +311,21 @@ function actor:overlap(other)
 		and self:bottom()>=other:top()
 end
 
+function actor:rect()
+	return {
+		x=self.x,y=self.y-self.h,
+		w=self.w,h=self.h,
+	}
+end
+
 function init_actors()
 	actors={}
 end
 
 function add_actor(p)
-	return add(actors,actor:new(p))
+	local a=actor:new(p)
+	if (a.start) a:start()
+	return add(actors,a)
 end
 -->8
 -- physics
