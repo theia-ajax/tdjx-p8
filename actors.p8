@@ -11,7 +11,8 @@ actor_config={
 af={
 	grounded=shl(1,0),
 	platdrop=shl(1,1),
-	dead=shl(1,2),
+	actor_phys=shl(1,2),
+	dead=shl(1,3),
 }
 
 actor=class({
@@ -29,7 +30,7 @@ actor=class({
 	t_air=0,
 	t_jump_hold=0,
 	t_plat_drop=0,
-	t0=0,
+	t0=0,	
 	k_accel=64,
 	k_coldst=0.3, -- collision check distance
 	k_scndst=0.1, -- scan distance while searching for contact point
@@ -60,6 +61,7 @@ function actor:jump(force)
 end
 
 function actor:on_wall() end
+function actor:on_ground() end
 function actor:on_death() end
 
 function actor:control(ix,iy,ibtns,dt)
@@ -146,6 +148,8 @@ function actor:move(dt)
 	end
 		
 	local stand=self:getf(af.grounded)
+	local actor_phys=self:getf(af.actor_phys)
+	
 	self:setf(af.grounded,false)
 	
 	self.dx+=self.ddx*dt
@@ -168,12 +172,15 @@ function actor:move(dt)
 	
 	local tdx=fdx+self.pushx
 	local dirx=sgn(tdx)
+
+	local xsolid_layer=1
+	if (actor_phys) xsolid_layer+=2
 	
 	-- x movement
 	local nx=self.x+
 		tdx+dirx*self.k_coldst
 				
-	if not solid(nx,self.y-self.h) then
+	if not solid(nx,self.y-self.h,xsolid_layer) then
 		-- no contact, move normally
 		self.x+=tdx
 	else
@@ -181,7 +188,8 @@ function actor:move(dt)
 		-- find contact point
 		while not solid(
 			self.x+dirx*self.k_coldst,
-			self.y-0.5)
+			self.y-0.5,
+			xsolid_layer)
 		do
 			self.x+=dirx*self.k_scndst
 		end
@@ -199,16 +207,19 @@ function actor:move(dt)
 		self.x-self.w,self.x+self.w
 
 	if fdy<0 then
+		local up_solid_layer=1
+		if (actor_phys) up_solid_layer+=2
+	
 		-- going up
-		if solid(left,self.y+fdy-1) or
-			solid(right,self.y+fdy-1)
+		if solid(left,self.y+fdy-1,up_solid_layer) or
+			solid(right,self.y+fdy-1,up_solid_layer)
 		then
 			-- hit ceiling
 			self.dy=0
 			
 			-- search contact point
-			while not solid(left,self.y-1)
-				and not solid(right,self.y-1)
+			while not solid(left,self.y-1,up_solid_layer)
+				and not solid(right,self.y-1,up_solid_layer)
 			do
 				self.y-=0.01
 			end
@@ -218,14 +229,28 @@ function actor:move(dt)
 	else
 		-- going down
 		
-		local is_solid=nil
-		if self.t_plat_drop<=0
-		then
-			is_solid=platform_solid
-		else
-			is_solid=blocked_platform_solid
+		-- map layer +
+		-- platform_solid layer
+		-- will consider platforms
+		-- as solid
+		local down_solid_layer=0x5
+		if (actor_phys) down_solid_layer+=2
+		
+		-- map layer + 
+		-- if in platform drop phase
+		-- set layer to use
+		-- blocked_platform_solid
+		-- so that platforms are
+		-- ignored unless they are
+		-- a non-passable platform
+		if self.t_plat_drop>0 then
+			down_solid_layer=0x9
 		end
-	
+			
+		local is_solid=function(x,y)
+			return solid(x,y,down_solid_layer)
+		end
+			
 		if is_solid(left,self.y+fdy)
 			or is_solid(right,self.y+fdy)
 		then
@@ -257,6 +282,8 @@ function actor:move(dt)
 				self.y-=0.05
 				count+=1
 			end
+			
+			self:on_ground()
 --[[			while solidfn(right,self.y-0.1)
 			do
 				self.y-=0.05
@@ -299,6 +326,12 @@ function actor:left() return self.x-self.w end
 function actor:right() return self.x+self.w end
 function actor:top() return self.y-self.h end
 function actor:bottom() return self.y end
+function actor:midrect() 
+	return {
+		x=self.x,y=self.y-self.h/2,
+		w=self.w,h=self.h
+	}
+end
 
 function actor:center()
 	return self.x,self.y-self.h/2
@@ -320,6 +353,7 @@ end
 
 function init_actors()
 	actors={}
+	solid_actors={}
 end
 
 function add_actor(p)
@@ -339,9 +373,16 @@ function w2si(wx,wy)
 	return flr(sx),flr(sy)
 end
 
-function solid(wx,wy)
-	-- todo: other things
-	return map_solid(wx,wy)
+function solid(wx,wy,layer)
+	layer=layer or 1
+	local ret=false
+	for l=1,#solid_layer_fns do
+		if band(layer,shl(0x1,l-1))~=0 then
+			local fn=solid_layer_fns[l]
+			ret=ret or fn(wx,wy)
+		end
+	end
+	return ret
 end
 
 -- flags
@@ -359,6 +400,7 @@ k_flag_platform_block=4
 k_flag_slope=3
 k_flag_flip_x=4
 k_flag_flip_y=5
+
 
 -- is world coord: wx,wy solid
 -- 1 world unit == 8 pixels
@@ -388,20 +430,21 @@ function map_solid(wx,wy)
 				end
 			end
 		elseif fget(val,k_flag_platform) then
+			-- platform returns false on
+			-- default map layer
+			return false
 		else
 			return true
 		end
+	else
+		return false
 	end
-	return false
 end
 
 function platform_solid(wx,wy)
-	local ret=solid(wx,wy)
 	local val=mget(wx,wy)
-	if fget(val,k_flag_platform) then
-		return wy-flr(wy)<0.5
-	end
-	return ret
+	return fget(val,k_flag_platform)
+		and wy-flr(wy)<0.5
 end
 
 function blocked_platform_solid(wx,wy)
@@ -413,6 +456,27 @@ function blocked_platform_solid(wx,wy)
 	return ret
 end
 
+function actor_solid(wx,wy)
+	local n=#solid_actors
+	for i=1,n do
+		local a=solid_actors[i]
+		if wx>=a:left() and
+			wx<=a:right() and
+			wy>=a:top() and
+			wy<=a:bottom()
+		then
+			return true
+		end
+	end
+	return false
+end
+
+solid_layer_fns={
+	map_solid,
+	actor_solid,
+	platform_solid,
+	blocked_platform_solid,
+}
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
