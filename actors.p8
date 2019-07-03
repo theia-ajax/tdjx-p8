@@ -37,6 +37,7 @@ actor=class({
 	k_bounce_wall=0,
 	k_bounce_floor=0,
 	k_jump_force=12,
+	k_max_jumps=2,
 	k_max_move=8,
 	k_jump_forgive_t=5/60,
 	k_jump_hold_t=1/2,
@@ -107,7 +108,7 @@ function actor:control(ix,iy,ibtns,dt)
 	end
 	
 	local canjump=stand
-		or self.jumps<0
+		or self.jumps<self.k_max_jumps
 		or (not stand
 						and self.t_air<self.k_jump_forgive_t)
 
@@ -133,6 +134,10 @@ function actor:control(ix,iy,ibtns,dt)
 		end
 	elseif stand then
 		self.t_jump_hold=0
+	end
+	
+	if band(ibtns,2)~=0 then
+		on_actor_activate(self)
 	end
 end
 
@@ -361,6 +366,8 @@ function add_actor(p)
 	if (a.start) a:start()
 	return add(actors,a)
 end
+
+function on_actor_activate(a) end
 -->8
 -- physics
 
