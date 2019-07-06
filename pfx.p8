@@ -12,6 +12,7 @@ pfx=class({
 	t_life=0,
 	color1=7,
 	layer=0,
+	fric=0,
 })
 
 function pfx_init()
@@ -54,6 +55,19 @@ function pfx_update(dt)
 		p.dy+=p.ddy*dt
 		p.x+=p.dx*dt
 		p.y+=p.dy*dt
+
+		if p.fric>0 then
+			local nx,ny,mag=norm(p.dx,p.dy)
+			local sx,sy=sgn(nx),sgn(ny)
+			p.dx-=nx*p.fric*mag*dt
+			p.dy-=ny*p.fric*mag*dt
+			if sx~=sgn(p.dx) then
+				p.dx=0
+			end
+			if sy~=sgn(p.dy) then
+				p.dy=0
+			end
+		end
 		
 		p.t_life-=dt
 		if (p.t_life<=0) del(pfx_list,p)

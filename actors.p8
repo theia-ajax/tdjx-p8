@@ -63,6 +63,7 @@ end
 
 function actor:on_wall() end
 function actor:on_ground() end
+function actor:on_ceil() end
 function actor:on_death() end
 
 function actor:control(ix,iy,ibtns,dt)
@@ -105,6 +106,11 @@ function actor:control(ix,iy,ibtns,dt)
  
 	if stand then	
 		self.jumps=0
+	else
+		-- if we didn't jump to get into
+		-- non-standing state
+		-- advance jumps
+		if (self.jumps==0) self.jumps=1
 	end
 	
 	local canjump=stand
@@ -116,8 +122,8 @@ function actor:control(ix,iy,ibtns,dt)
 	canjump=canjump and
 		not solid(self.x,self.y-0.5)
 		
-	local jumpreq=band(ibtns,1)~=0
-	local jumphold=band(ibtns,4)~=0
+	local jumpreq=band(ibtns,0x1000)~=0
+	local jumphold=band(ibtns,0x10)~=0
 		
 	if jumpreq and canjump then
 		self:jump()
@@ -136,7 +142,7 @@ function actor:control(ix,iy,ibtns,dt)
 		self.t_jump_hold=0
 	end
 	
-	if band(ibtns,2)~=0 then
+	if band(ibtns,0x0800)~=0 then
 		on_actor_activate(self)
 	end
 end
@@ -145,6 +151,9 @@ function actor:move(dt)
 	if self.behavior then
 		self:behavior(dt)
 	end
+	
+	local oldx,oldy=self.x,self.y
+	local dbg={}
 
 	-- do physics
 	if not self:getf(af.grounded) then
@@ -161,10 +170,12 @@ function actor:move(dt)
 	self.dy+=self.ddy*dt
 
 	if stand and self.dx~=0 then
-		if abs(self.dx)<0.1 then
+
+		local sdx=sgn(self.dx)
+		self:force(-sgn(self.dx)*self.k_fric*dt,0)
+		if sdx~=sgn(self.dx) then
 			self.dx=0
 		end
-		self:force(-sgn(self.dx)*self.k_fric*dt,0)
 	end
 	
 	local max_x,max_y=
@@ -193,7 +204,7 @@ function actor:move(dt)
 		-- find contact point
 		while not solid(
 			self.x+dirx*self.k_coldst,
-			self.y-0.5,
+			self.y-self.h,
 			xsolid_layer)
 		do
 			self.x+=dirx*self.k_scndst
@@ -215,19 +226,24 @@ function actor:move(dt)
 		local up_solid_layer=1
 		if (actor_phys) up_solid_layer+=2
 	
+
+	
 		-- going up
-		if solid(left,self.y+fdy-1,up_solid_layer) or
-			solid(right,self.y+fdy-1,up_solid_layer)
+		local h2=self.h*2
+		if solid(left,self.y+fdy-h2,up_solid_layer) or
+			solid(right,self.y+fdy-h2,up_solid_layer)
 		then
 			-- hit ceiling
 			self.dy=0
-			
+
 			-- search contact point
-			while not solid(left,self.y-1,up_solid_layer)
-				and not solid(right,self.y-1,up_solid_layer)
+			while solid(left,self.y-h2,up_solid_layer)
+				or solid(right,self.y-h2,up_solid_layer)
 			do
 				self.y-=0.01
 			end
+			
+			self:on_ceil()
 		else
 			self.y+=fdy
 		end
@@ -306,6 +322,13 @@ function actor:move(dt)
 	
 	self.pushx=0
 	self.pushy=0
+	
+	local diffx,diffy=self.x-oldx,self.y-oldy
+	local d=sqrt(diffx*diffx+diffy*diffy)
+	if d>2 then
+		log("big jump")
+		log(tostr(dbg.up))
+	end
 end
 
 function actor:force(fx,fy)
@@ -329,7 +352,7 @@ end
 
 function actor:left() return self.x-self.w end
 function actor:right() return self.x+self.w end
-function actor:top() return self.y-self.h end
+function actor:top() return self.y-self.h*2 end
 function actor:bottom() return self.y end
 function actor:midrect() 
 	return {
@@ -357,12 +380,14 @@ function actor:rect()
 end
 
 function init_actors()
-	actors={}
+	actors={id=0}
 	solid_actors={}
 end
 
 function add_actor(p)
 	local a=actor:new(p)
+	a.id=actors.id
+	actors.id+=1
 	if (a.start) a:start()
 	return add(actors,a)
 end

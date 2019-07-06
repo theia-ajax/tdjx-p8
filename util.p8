@@ -127,8 +127,8 @@ end
 
 function norm(x,y)
 	local l=len(x,y)
-	if (l>0) return x/l,y/l
-	return 0,0
+	if (l>0) return x/l,y/l,l
+	return 0,0,0
 end
 
 function midp(x1,y1,x2,y2)
@@ -303,19 +303,22 @@ function tick_sequences()
 	
 	for s in all(sequences) do
 		if s and costatus(s)~="dead" then
-			assert(coresume(s))
+			assert(coresume(s,sequences[s]))
 		else
+			sequences[s]=nil
 			del(sequences,s)
 		end
 	end
 end
 
-function sequence(fn)
+function sequence(fn,param)
 	if not sequences then
 		sequences={}
 	end
 	
-	return add(sequences,cocreate(fn))
+	local c=add(sequences,cocreate(fn))
+	sequences[c]=param or {}
+	return c
 end
 
 function wait_sec(sec)
@@ -467,13 +470,44 @@ function input_xy(pid)
 	return ix,iy
 end
 
+input_curr={}
+input_prev={}
+
+function input_update()
+	set(input_prev,input_curr)
+	for pid=0,5 do
+		for b=0,6 do
+			input_curr[pid*7+b+1]=btn(b,pid)
+		end
+	end
+end
+
+function btnd(b,pid)
+	b=b or 0
+	pid=pid or 0
+	local i=pid*7+b+1
+	return input_curr[i] and not input_prev[i]
+end
+
+function btnr(b,pid)
+	b=b or 0
+	pid=pid or 0
+	local i=pid*7+b+1
+	return not input_curr[i] and input_prev[i]
+end
+
 function input_btns(pid)
 	pid=pid or 0
 	local bt=0
-	if (btnp(4,pid)) bt+=1
-	if (btnp(5,pid)) bt+=2
-	if (btn(4,pid)) bt+=4
-	if (btn(5,pid)) bt+=8
+	
+	local fn=btn
+	for cat=0,1 do
+		if (cat==1) fn=btnd
+		for b=0,6 do
+			if (fn(b,pid)) bt+=shl(1,cat*8+b)
+		end
+	end
+
 	return bt
 end
 
