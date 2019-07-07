@@ -9,10 +9,10 @@ actor_config={
 
 -- actor flags
 af={
-	grounded=shl(1,0),
-	platdrop=shl(1,1),
-	actor_phys=shl(1,2),
-	dead=shl(1,3),
+	grounded=0x1,
+	platdrop=0x2,
+	actor_phys=0x4,
+	dead=0x8,
 }
 
 actor=class({
@@ -39,10 +39,10 @@ actor=class({
 	k_jump_force=12,
 	k_max_jumps=2,
 	k_max_move=8,
-	k_jump_forgive_t=5/60,
-	k_jump_hold_t=1/2,
+	k_jump_forgive_t=0x0.1555, --5/60
+	k_jump_hold_t=0.5,
 	k_jump_hold_force=1,
-	k_jump_hold_delay=0.0833,
+	k_jump_hold_delay=0x0.1555, --5/60
 	k_plat_drop_t=0.1,
 	k_grav_scale=1,
 	k_fric=8,
@@ -67,6 +67,11 @@ function actor:on_ceil() end
 function actor:on_death() end
 
 function actor:control(ix,iy,ibtns,dt)
+	if self:getf(af.dead) then
+		return
+	end
+
+
 	local accel=self.k_accel*dt
 	if not self:getf(af.grounded) then
 		accel=shr(accel,1)
@@ -255,7 +260,6 @@ function actor:move(dt)
 		-- will consider platforms
 		-- as solid
 		local down_solid_layer=0x5
-		if (actor_phys) down_solid_layer+=2
 		
 		-- map layer + 
 		-- if in platform drop phase
@@ -267,6 +271,9 @@ function actor:move(dt)
 		if self.t_plat_drop>0 then
 			down_solid_layer=0x9
 		end
+		
+		if (actor_phys) down_solid_layer+=2
+		
 			
 		local is_solid=function(x,y)
 			return solid(x,y,down_solid_layer)
