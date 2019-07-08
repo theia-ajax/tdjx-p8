@@ -495,13 +495,47 @@ function blocked_platform_solid(wx,wy)
 	return ret
 end
 
+function update_solid_actors(iter)
+	iter=iter or 3
+	local swap=false
+	
+	local a=solid_actors
+	local n=#a
+	for _=1,iter do
+		local swap=false
+		for i=1,n-1 do
+			if a[i]:left()>a[i+1]:left() then
+				a[i],a[i+1]=a[i+1],a[i]
+				swap=true
+			end
+		end
+		if (not swap) break
+	end
+end
+
+_actv={}
 function actor_solid(wx,wy)
 	local n=#solid_actors
+	local sa=solid_actors
+
+	local flag=false	
+	local nn=0
 	for i=1,n do
-		local a=solid_actors[i]
-		if wx>=a:left() and
-			wx<=a:right() and
-			wy>=a:top() and
+		local l,r=sa[i]:left(),sa[i]:right()
+		if wx>=l then
+			if wx<=r then
+				nn+=1
+				_actv[nn]=sa[i]
+				flag=true
+			end
+		elseif flag then
+			break
+		end
+	end
+	
+	for i=1,nn do
+		local a=_actv[i]
+		if wy>=a:top() and
 			wy<=a:bottom()
 		then
 			return true
