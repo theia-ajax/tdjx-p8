@@ -2,11 +2,16 @@ pico-8 cartridge // http://www.pico-8.com
 version 18
 __lua__
 function _init()
+	dt=0x0000.0444
+
 	for xx=0,127 do
 		for yy=0,63 do
 			if mget(xx,yy)==16 then
 				mset(xx,yy,0)
-				ship=actor:new({x=xx,y=yy,sp=16,id=0,face=1})
+				ship=actor:new({
+					x=xx,y=yy,
+					sp=16,id=0,face=1,
+					t_fire=0,fire_ivl=0.19})
 			end
 		end
 	end
@@ -26,6 +31,25 @@ function _init()
 	end
 	
 	effects={}
+	
+	enemies={}
+	
+	for i=1,8 do
+		local ex,ey=random_pos(0,0,32,16)
+		add(enemies,actor:new({
+			x=ex+0.5,y=ey+0.5,
+			rot=0,rad=0.4,
+		}))
+	end
+end
+
+function random_pos(x,y,w,h)
+	local px,py=0,0
+	repeat
+		px=flr(rnd(w))+x
+		py=flr(rnd(h))+y
+	until not solid(px,py)
+	return px,py
 end
 
 function _update60()
@@ -35,7 +59,7 @@ function _update60()
 	end)
 	
 	foreach(effects,function(fx)
-		fx.t+=0x0000.0888
+		fx.t+=dt
 		fx.nt=fx.t/fx.dur
 		if fx.t>=fx.dur then
 			del(effects,fx)
@@ -65,6 +89,14 @@ function _draw()
 		if b.on then
 			draw_actor(b)
 		end
+	end)
+	
+	foreach(enemies,function(e)
+		local ex,ey=e.x*8,e.y*8
+		circfill(ex,ey,e.rad*8,8)
+		local lx,ly=cos(e.rot)*3+ex,
+			sin(e.rot)*3+ey
+		line(ex,ey,lx,ly,10)
 	end)
 	
 	foreach(effects,function(fx)
@@ -181,11 +213,18 @@ function ship_control(self)
 		self.face=1
 	end
 	
-	if btnp(4,self.id) then
-		fire_bullet(self.x-self.face*0.125,
-			self.y+0.125,
-			self.face*0.6,
-			30)
+	self.t_fire-=dt
+	
+	if btn(4,self.id) then
+		if self.t_fire<=0 then
+			fire_bullet(self.x-self.face*0.125,
+				self.y+0.125,
+				self.face*0.6,
+				30)
+			self.t_fire=self.fire_ivl
+		end
+	else
+		self.t_fire=0
 	end
 end
 
@@ -221,9 +260,9 @@ end
 function add_spark(x,y)
 	return add(effects,{
 		x=x,y=y,
-		t=0,nt=0,dur=0.4,
+		t=0,nt=0,dur=0.35,
 		draw=function(self)
-			local v=self.nt*2
+			local v=self.nt*1.8
 			local rad=cos(v)*v*2+v+1
 			circ(self.x*8,self.y*8,rad,10)
 		end,
