@@ -396,23 +396,60 @@ function _init()
 	mouse = {}
 	mouse.x = 0
 	mouse.y = 0
+	mouse.lx = 0
+	mouse.ly = 0
+	mouse.mx = 0
+	mouse.my = 0
 	mouse.btn = 0
 	mouse.lbtn = 0
 	mouse.cx = 0
 	mouse.cy = 0
+	mouse.mode = "mouse"
 
 	gs = k_gsmenu
 end
 
 function _update60()
 	loggers_update()
-
-	mouse.x = stat(32)
-	mouse.y = stat(33)
-
+	
+	local ix,iy=0,0
+	if (btn(0)) ix-=1
+	if (btn(1)) ix+=1
+	if (btn(2)) iy-=1
+	if (btn(3)) iy+=1
+	
+	local b1,b2=btn(4),btn(5)
+	
+	if ix~=0 or iy~=0 or b1 or b2
+	then
+		mouse.mode = "cursor"
+	else
+		if stat(32)~=mouse.mx or
+			stat(33)~=mouse.my
+		then
+			mouse.mode = "mouse"
+		end
+	end
+	
+	mouse.lx = mouse.x
+	mouse.ly = mouse.y
 	mouse.lbtn = mouse.btn
-	mouse.btn = stat(34)
 
+
+	if mouse.mode == "mouse" then
+		mouse.mx = stat(32)
+		mouse.my = stat(33)
+		mouse.x = mouse.mx
+		mouse.y = mouse.my
+		mouse.btn = stat(34)	
+	elseif mouse.mode == "cursor" then
+		mouse.x += ix * 0.75
+		mouse.y += iy	* 0.75
+		mouse.btn = 0
+		if (b1) mouse.btn += 1
+		if (b2) mouse.btn += 2
+	end
+	
 	for b = 1, 3 do
 		if band(mouse.btn, b) ~= 0 and
 			band(mouse.lbtn, b) == 0
@@ -488,7 +525,7 @@ function draw_play()
 			if mv and
 				(gs == k_gsdead or btn(5))
 			then
-				spr(spst["mine"], x, y)
+				--spr(spst["mine"], x, y)
 			end
 		end
 	end
