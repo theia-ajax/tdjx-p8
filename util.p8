@@ -280,16 +280,13 @@ function watch(m,c)
 	add(_watches,{m=m,c=c})
 end
 
-function clear_watches()
-	_watches={}
-end
-
 function draw_watches()
 	local n=#_watches
 	for i=1,n do
 		local w=_watches[i]
 		print(w.m,0,(i-1)*6,w.c)
 	end
+	_watches={}
 end
 
 
@@ -312,9 +309,7 @@ function tick_sequences()
 end
 
 function sequence(fn,param)
-	if not sequences then
-		sequences={}
-	end
+	sequences=sequences or {}
 	
 	local c=add(sequences,cocreate(fn))
 	sequences[c]=param or {}

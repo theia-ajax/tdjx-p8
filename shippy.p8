@@ -3,135 +3,52 @@ version 18
 __lua__
 #include util.p8
 
+function set_game_state(state)
+	local gs=game_states[state]
+	if gs and gs~=game_state then
+		game_state_name=state
+		game_state=nil
+		gs.init()
+		game_state=gs
+	end
+end
+
 function _init()
 	dt=0x0000.0444
-
-	actors={}
-	enemies={}
+	high_score=0
 	
-	for xx=0,127 do
-		for yy=0,63 do
-			local wx,wy=xx+0.5,yy+0.5
-			if mget(xx,yy)==16 then
-				mset(xx,yy,0)
-				ship=add(actors,
-					actor:new({
-						x=wx,y=wy,
-						col_ox=-0.5,col_oy=-0.375,
-						col_w=0.875,col_h=0.625,
-						sp=16,id=0,face=1,
-						t_fire=0,fire_ivl=0.19}))
-			elseif mget(xx,yy)==0 then
-				if rnd()<0.01 then
-					local e=add(actors,
-						actor:new({
-							x=wx,y=wy,
-							col_ox=-0.5,col_oy=-0.375,
-							col_w=0.875,col_h=0.625,
-							sp=48,face=1}))
-					add(enemies,e)
-				end
-			end
-		end
-	end
+	game_states={
+		play={
+			init=play_init,
+			update=play_update,
+			draw=play_draw
+		},
+		title={
+			init=title_init,
+			update=title_update,
+			draw=title_draw
+		}
+	}
 	
-	cam_x=ship.x
-	
-	bullets={}
-	bullet_n=8
-	bullet_idx=1
-	for i=1,bullet_n do
-		add(bullets,
-			actor:new({
-				x=0,y=0,
-				sp=32,
-				on=false,
-			}))
-	end
-	
-	effects={}
+	set_game_state("title")
 end
 
-function random_pos(x,y,w,h)
-	local px,py=0,0
-	repeat
-		px=flr(rnd(w))+x
-		py=flr(rnd(h))+y
-	until not solid(px,py)
-	return px,py
-end
 
 function _update60()
+	tick_sequences()	
 
-	-- update ship
-	ship_control(ship)
-	foreach(enemies,enemy_control)
-	
-	foreach(actors,actor_move)
-	
-	ship_postmove(ship)
-	foreach(enemies,enemy_postmove)
-	
-	-- update bullets
-	foreach(bullets,function(b)
-		bullet_update(b)
-	end)
-	
-	-- update effects
-	foreach(effects,function(fx)
-		fx.t+=dt
-		fx.nt=fx.t/fx.dur
-		if fx.t>=fx.dur then
-			del(effects,fx)
-		end
-	end)
-	
-	-- update camera
-	local t_cam_x=ship.x
-	if ship.dx~=0 then
-		t_cam_x+=ship.face*2+ship.dx
+	if game_state and game_state.update then
+		game_state:update()
 	end
-	local lerp=function(a,b,t)
-		return (b-a)*t+a
-	end
-	cam_x=lerp(cam_x,t_cam_x,0.15)
-	cam_x=mid(cam_x,8,24)
 end
 
 function _draw()
-	cls()
-
-	local cwx,_=w2s(cam_x,0)	
-	camera(cwx-64,0)
-		
-	map(0,0,0,0,32,16)
-	
-	-- draw ship
-	foreach(actors,draw_actor)
-
-	local x1,y1,x2,y2=world_rect(ship)
-	x1,y1,x2,y2=w2sr(x1,y1,x2,y2)
-	
-	pset(x1,y1,10)
-	pset(x2,y1,10)
-	pset(x1,y2,10)
-	pset(x2,y2,10)
-	
-	-- draw bullets
-	foreach(bullets,function(b)
-		if b.on then
-			draw_actor(b)
-		end
-	end)
-		
-	-- draw effects
-	foreach(effects,function(fx)
-		fx:draw()
-	end)
-	
-	camera()
+	if game_state and game_state.draw then
+		game_state:draw()
+	end
 	
 	draw_log()
+	draw_watches()
 end
 
 function w2s(x,y)
@@ -182,20 +99,66 @@ function bullet_update(self)
 	self.t-=1
 	
 	if self.t<=0 or solid(self.x,self.y) then
-		self.on=false
-		add_spark(self.x-self.dx,self.y)
+		bullet_destroy(self)
 	end
 end
 
+function bullet_destroy(self)
+	self.on=false
+	add_spark(self.x-self.dx,self.y)
+end
+
 function enemy_control(self)
+	local dy=ship.y-self.y
+	if dy~=0 then
+		self.dy+=sgn(dy)*0.001
+	end
 	self.dx+=0.01*self.face
-	local maxspd=0.125
+	local maxspd=0.0125
+	local maxy=0.0625
 	self.dx=mid(self.dx,-maxspd,maxspd)
+	self.dy=mid(self.dy,-maxy,maxy)
+	
+	self.t_damage-=dt
+	if self.t_damage<=0 then
+		for i=0,15 do
+			self.pals[i]=nil
+		end
+	end
 end
 
 function enemy_postmove(self)
 	if self.dx==0 then
 		self.face*=-1
+	end
+	
+	if actor_overlap(self,ship) then
+		if score>high_score then
+			high_score=score
+		end
+		set_game_state("title")
+	end
+end
+
+function enemy_damage(self,amt)
+	self.t_damage=0.0833
+	self.pals[14]=7
+	self.health-=amt
+	if self.health<=0 then
+		sequence(function(params)
+			local x,y=params.x,params.y
+			for i=1,5 do
+				local a=rnd()
+				local m=rnd(0.5)
+				x+=cos(a)*m*2
+				y+=sin(a)*m
+				add_spark(x,y)
+				wait_sec(0.15)
+			end
+		end,{x=self.x,y=self.y})
+		del(actors,self)
+		del(enemies,self)
+		score=score+1
 	end
 end
 
@@ -235,6 +198,8 @@ function ship_postmove(self)
 	else
 		self.t_fire=0
 	end
+	
+	
 end
 
 function actor_move(self)
@@ -274,6 +239,11 @@ end
 
 function draw_actor(self)
 	if self.sp then
+		if self.pals then
+			for i=0,15 do
+				if (self.pals[i]) pal(i,self.pals[i])
+			end
+		end
 		local px,py=w2s(self.x,self.y)
 		px-=self.w*8
 		py-=self.h*8
@@ -282,6 +252,10 @@ function draw_actor(self)
 			flipx=true
 		end
 		spr(self.sp,px,py,1,1,flipx)
+		pal()
+		local l,t,r,b=world_rect(self)
+		l,t,r,b=w2sr(l,t,r,b)
+		--rect(l,t,r,b,11)
 	end
 end
 
@@ -337,20 +311,228 @@ function local_rect(self)
 		self.col_ox+self.col_w,
 		self.col_oy+self.col_h
 end
+
+function actor_overlap(a,b)
+	local al,at,ar,ab=world_rect(a)
+	local bl,bt,br,bb=world_rect(b)
+	return al<=br and
+		ar>=bl and
+		at<=bb and
+		ab>=bt
+end
+
+function random_pos(x,y,w,h)
+	local px,py=0,0
+	repeat
+		px=flr(rnd(w))+x
+		py=flr(rnd(h))+y
+	until not solid(px,py)
+	return px,py
+end
+
+-->8
+-- title screen
+
+function title_init()
+	title={
+		start_cr=sequence(function()
+			wait_sec(0.5)
+			set_game_state("play")
+		end)
+	}
+end
+
+function title_update()
+end
+
+function title_draw()
+	cls()
+	print("★ shippy ★",36+sin(t())*8,62,7)
+	
+	local hi=high_score
+	print("hi score: "..hi,46,96,6)
+end
+
+
+-->8
+-- play screen
+
+function play_init()
+	actors={}
+	enemies={}
+
+	reload()
+
+	ship=nil	
+	for xx=0,32 do
+		for yy=0,16 do
+			local wx,wy=xx+0.5,yy+0.5
+			if mget(xx,yy)==16 then
+				mset(xx,yy,0)
+				ship=add(actors,
+					actor:new({
+						x=wx,y=wy,
+						col_ox=-0.5,col_oy=-0.375,
+						col_w=0.875,col_h=0.625,
+						sp=16,id=0,face=1,
+						t_fire=0,fire_ivl=0.19}))
+			elseif mget(xx,yy)==0 then
+				if rnd()<0.015 then
+					local e=add(actors,
+						actor:new({
+							x=wx,y=wy,
+							col_ox=-0.5,col_oy=-0.375,
+							col_w=0.875,col_h=0.625,
+							sp=48,face=1,
+							health=3,
+							pals={},
+							t_damage=0}))
+					add(enemies,e)
+				end
+			end
+		end
+	end
+	
+	cam_x=ship.x
+	
+	bullets={}
+	bullet_n=8
+	bullet_idx=1
+	for i=1,bullet_n do
+		add(bullets,
+			actor:new({
+				x=0,y=0,
+				col_ox=-0.375,col_oy=-0.25,
+				col_w=0.625,col_h=0.375,
+				sp=32,
+				on=false,
+			}))
+	end
+	
+	effects={}
+	
+	score=0
+	lives=3
+end
+
+function play_update()
+	-- update ship
+	ship_control(ship)
+	foreach(enemies,enemy_control)
+	
+	foreach(actors,actor_move)
+	
+	ship_postmove(ship)
+	foreach(enemies,enemy_postmove)
+	
+	-- update bullets
+	foreach(bullets,function(b)
+		if b.on then
+			bullet_update(b)
+			
+			local len=#enemies
+			for i=1,len do
+				local e=enemies[i]
+				if actor_overlap(b,e) then
+					bullet_destroy(b)
+					enemy_damage(e,1)
+					break
+				end
+			end
+		end
+	end)
+	
+	-- update effects
+	foreach(effects,function(fx)
+		fx.t+=dt
+		fx.nt=fx.t/fx.dur
+		if fx.t>=fx.dur then
+			del(effects,fx)
+		end
+	end)
+	
+	-- update camera
+	local t_cam_x=ship.x
+	if ship.dx~=0 then
+		t_cam_x+=ship.face*2+ship.dx
+	end
+	local lerp=function(a,b,t)
+		return (b-a)*t+a
+	end
+	cam_x=lerp(cam_x,t_cam_x,0.15)
+	cam_x=mid(cam_x,8,24)
+end
+
+function play_draw()
+	cls()
+
+	local cwx,_=w2s(cam_x,0)	
+	camera(cwx-64,0)
+		
+	map(0,0,0,0,32,16)
+	
+	-- draw ship
+	foreach(actors,draw_actor)
+
+	local x1,y1,x2,y2=world_rect(ship)
+	x1,y1,x2,y2=w2sr(x1,y1,x2,y2)
+	
+	pset(x1,y1,10)
+	pset(x2,y1,10)
+	pset(x1,y2,10)
+	pset(x2,y2,10)
+	
+	-- draw bullets
+	foreach(bullets,function(b)
+		if b.on then
+			draw_actor(b)
+		end
+	end)
+		
+	-- draw effects
+	foreach(effects,function(fx)
+		fx:draw()
+	end)
+	
+	camera()
+	
+	rectfill(0,121,127,127,0)
+	line(0,121,127,121,12)
+	
+	print("score:"..tostr(score),
+		2,123,7)
+		
+	if false then
+	for i=1,lives do
+		local x=123-(i-1)*6
+		spr(17,x,123)
+	end
+	local m="lives:"
+	local w=#m*4
+	print(m,127-6*lives-w,123)
+	end
+	
+	spr(17,110,123)
+	spr(1,116,125)
+	local m=""
+	if (lives<10) m=m.."0"
+	print(m..lives,120,123,7)
+end
+
 __gfx__
-0000000000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
-0070070000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
+0000000070700000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
+0000000007000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
+0070070070700000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 0007700000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 0007700000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 0070070000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000dddddddd00000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-660cc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66cccc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+660cc000060c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+66cccc0006ccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+66666660066660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+66555555005500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 06666555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
