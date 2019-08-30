@@ -109,11 +109,19 @@ function bullet_destroy(self)
 end
 
 function enemy_control(self)
+	local dx=ship.x-self.x
 	local dy=ship.y-self.y
-	if dy~=0 then
-		self.dy+=sgn(dy)*0.001
+	self.dx+=dx*0.1
+	self.dy+=dy*0.002
+--	if dy~=0 then
+--		self.dy+=sgn(dy)*0.001
+--	end
+	--self.dx+=0.01*self.face
+	
+	if dx~=0 then
+		self.face=sgn(dx)
 	end
-	self.dx+=0.01*self.face
+	
 	local maxspd=0.0125
 	local maxy=0.0625
 	self.dx=mid(self.dx,-maxspd,maxspd)
@@ -128,10 +136,6 @@ function enemy_control(self)
 end
 
 function enemy_postmove(self)
-	if self.dx==0 then
-		self.face*=-1
-	end
-	
 	if actor_overlap(self,ship) then
 		if score>high_score then
 			high_score=score
@@ -145,17 +149,17 @@ function enemy_damage(self,amt)
 	self.pals[14]=7
 	self.health-=amt
 	if self.health<=0 then
-		sequence(function(params)
-			local x,y=params.x,params.y
-			for i=1,5 do
+		sequence(function()
+			local x,y=self.x,self.y
+			for i=1,8 do
 				local a=rnd()
 				local m=rnd(0.5)
-				x+=cos(a)*m*2
+				x+=cos(a)*m
 				y+=sin(a)*m
-				add_spark(x,y)
-				wait_sec(0.15)
+				add_spark(x,y,{col=8})
+				wait_sec(0.08)
 			end
-		end,{x=self.x,y=self.y})
+		end)
 		del(actors,self)
 		del(enemies,self)
 		score=score+1
@@ -287,14 +291,16 @@ function solid_y(x,y,l,r)
 		solid(x+r,y)
 end
 
-function add_spark(x,y)
+function add_spark(x,y,params)
+	params=params or {}
 	return add(effects,{
 		x=x,y=y,
 		t=0,nt=0,dur=0.35,
+		col=params.col or 10,
 		draw=function(self)
 			local v=self.nt*1.8
 			local rad=cos(v)*v*2+v+1
-			circ(self.x*8,self.y*8,rad,10)
+			circ(self.x*8,self.y*8,rad,self.col)
 		end,
 	})
 end
