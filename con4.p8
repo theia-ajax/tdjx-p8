@@ -76,9 +76,10 @@ function play_update()
 end
 
 function play_draw()
-	cls()
+	cls(1)
 	
-	circfill((sel_x-1)*(128/board_w)+(128/board_w/2),4,4,sel_p)
+	local sx,_=piece_to_screen(sel_x,0)
+	circfill(sx,8,7,sel_p)
 	
 	
 	board_draw()
@@ -128,9 +129,9 @@ board={}
 board_w=7
 board_h=6
 
-board_draw_x=0
+board_draw_x=7
 board_draw_y=16
-board_draw_w=128
+board_draw_w=112
 board_draw_h=96
 
 piece_none=0
@@ -163,7 +164,7 @@ end
 function piece_to_screen(x,y)
 	local dx,dy=board_draw_w/board_w,
 		board_draw_h/board_h
-	return (x-1)*dx+dx/2,
+	return board_draw_x+(x-1)*dx+dx/2,
 		board_draw_y+board_draw_h-(y-1)*dy-dy/2
 end
 
@@ -182,7 +183,7 @@ function board_draw()
 		end
 	end
 	
-	for x=0,128,dx do
+	for x=bx,bx+bw,dx do
 		line(x,by,x,by+bh-1,5)
 	end
 	
