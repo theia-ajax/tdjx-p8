@@ -156,6 +156,17 @@ function rect_draw(r,c,f)
 	f(x1,y1,x2,y2,c)
 end
 
+function rect_overlap(a,b)
+	local ax1,ay1=topleft(a)
+	local ax2,ay2=botright(a)
+	local bx1,by1=topleft(b)
+	local bx2,by2=botright(b)
+	return ax1<=bx2 and
+		ax2>=bx1 and
+		ay1<=by2 and
+		ay2>=by1
+end
+
 function rect_coll(a,b)
 	-- calculates minkowski sum
 	-- of rectangles

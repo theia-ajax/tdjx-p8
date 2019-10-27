@@ -15,10 +15,13 @@ function _init()
 		}
 	}
 	set_state("play")
+	
+	init_sequences()
 end
 
 function _update()
 	game_state.update()
+	tick_sequences()
 end
 
 function _draw()
@@ -52,7 +55,7 @@ function play_update()
 	end
 	
 	if btnp(4) then
-		if board_drop(sel_x,sel_p) then
+		if bard_drop(sel_x,sel_p) then
 			if sel_p==piece_a then
 				sel_p=piece_b
 			else
@@ -76,7 +79,7 @@ function play_update()
 end
 
 function play_draw()
-	cls(1)
+	cls()
 	
 	local sx,_=piece_to_screen(sel_x,0)
 	circfill(sx,8,7,sel_p)
@@ -262,6 +265,29 @@ board_check_shape(get,ret)
 			end
 		end
 	end
+end
+-->8
+function init_sequences()
+	sequences={}
+end
+
+function tick_sequences()
+	for sequence in all(sequences) do
+		if sequence
+			and costatus(sequence)~="dead"
+		then
+			assert(coresume(sequence,sequences[sequence]))
+		else
+			sequence[sequence]=nil
+			del(sequences,sequence)
+		end
+	end
+end
+
+function sequence(fn,arg)
+	local seq=cocreate(fn)
+	sequences[seq]=arg
+	return add(sequences,seq)
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
