@@ -133,12 +133,12 @@ function player:on_update(dt)
 	end
 end
 
-k_pcols={9,8}
+k_pcols={4,11}
 function player:on_draw()
 	local x,y=topleft(self)
 	pal(7,k_pcols[self.id+1])
 	spr(1,x,y)
-	pal()
+	pal(7,7)
 end
 
 function reset()
@@ -146,48 +146,83 @@ function reset()
 	_init()
 end
 
+function add_entity(e)
+	local ret=add(entities,e)
+	if e.on_draw then
+		add(drawables,e)
+	end
+	return ret
+end
+
+function del_entity(e)
+	del(entities,e)
+	if e.on_draw then
+		del(drawables,e)
+	end
+end
+
+g_pid=0
+function add_player(x,y,m)
+	local p=add_entity(player:new({
+		id=g_pid,
+		x=x*8+4,
+		y=y*8+4,
+		touch={},
+	}))
+	players[g_pid]=p
+	g_pid+=1
+	mset(x,y,0)
+	return p
+end
+
+function add_door(x,y,m)
+	return add_entity(door:new({
+		mx=x,my=y,mv=17,
+		x=x*8+4,y=y*8+4,
+		w=4,h=4,
+		set={},
+	}))
+end
+
+function add_switch(x,y,m)
+	return add_entity(switch:new({
+		mx=x,my=y,mv=32,
+		x=x*8+4,y=y*8+4,
+		set={},
+	}))
+end
+
+function add_bridge(x,y,m)
+	local b=add_entity(bridge:new({
+		mx=x,my=y,mv=49,
+		x=x*8+4,y=y*8+4,
+		set={},
+	}))
+	b:on_off()
+	return b
+end
+
+_emap={}
+_emap[1]=add_player
+_emap[17]=add_door
+_emap[32]=add_switch
+_emap[49]=add_bridge
+
 function _init()
+
 	poke(0x5f2d,1)
+	poke(0x5f2e,1)
 
 	entities={}
+	drawables={}
 	players={}
-	
-	local pid=0
 	
 	for x=0,15 do
 		for y=0,15 do
 			local m=mget(x,y)
-			if m==1 then
-				local p=add(
-				entities,player:new({
-					id=pid,
-					x=x*8+4,
-					y=y*8+4,
-					touch={},
-				}))
-				players[pid]=p
-				pid+=1
-				mset(x,y,0)
-			elseif m==17 then
-				add(entities,door:new({
-					mx=x,my=y,mv=17,
-					x=x*8+4,y=y*8+4,
-					w=4,h=4,
-					set={},
-				}))
-			elseif m==32 then
-				add(entities,switch:new({
-					mx=x,my=y,mv=32,
-					x=x*8+4,y=y*8+4,
-					set={},
-				}))
-			elseif m==49 then
-				local b=add(entities,bridge:new({
-					mx=x,my=y,mv=49,
-					x=x*8+4,y=y*8+4,
-					set={},
-				}))
-				b:on_off()
+			local add_fn=_emap[m]
+			if add_fn then
+				add_fn(x,y,m)
 			end
 		end
 	end
@@ -231,10 +266,25 @@ function _update()
 		end
 	end
 
+	local n=#drawables
+
+	for j=1,3 do
+		for i=1,n-1 do
+			if drawables[i].y>drawables[i+1].y
+			then
+				local t=drawables[i]
+				drawables[i]=drawables[i+1]
+				drawables[i+1]=t
+			end
+		end
+	end
 end
 
 function _draw()
-	cls(1)
+	pal(3,128,1)
+	pal(4,128+9,1)
+	pal(11,128+12,1)
+	cls(3)
 	
 	map(0,0,0,0,16,16)
 	
@@ -242,7 +292,7 @@ function _draw()
 	map(0,0,0,0,16,16,2)
 	palt()
 	
-	foreach(entities,function(e)
+	foreach(drawables,function(e)
 		if (e.on_draw) e.on_draw(e)
 		if debug_colliders then
 			--rect_draw(e,10)
