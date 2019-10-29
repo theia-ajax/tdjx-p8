@@ -454,7 +454,7 @@ function class(clob)
 	clob.new=function(self,ob)
 		ob=set(ob,{class=clob})
 		setmetatable(ob,{__index=clob})
-		if (clob.create) clob:create()
+		if (self.create) self:create()
 		return ob
 	end
 	return clob
