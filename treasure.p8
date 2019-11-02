@@ -5,6 +5,20 @@ __lua__
 
 k_pit=48
 
+-- x and y are constrained
+-- to map coordinates
+-- so we can happily
+-- store them in 8 bits
+-- 4 each
+function hash_xy(x,y)
+	return bor(shl(x or 0,4),y or 0)
+end
+
+function unhash_xy(h)
+	return shr(band(h,0xf0),4),
+		band(h,0xf)
+end
+
 entity=class({
 	name="entity",
 	x=0,y=0,w=4,h=4,
@@ -52,83 +66,82 @@ function bullet:on_draw()
 	spr(3,x,y)
 end
 
+function is_map_entity(e)
+	return e.mx~=nil
+		and e.my~=nil
+		and e.mv~=nil
+end
+
 mapentity=class({
 	extends=entity,
 	mx=0,my=0,mv=0,
 })
 
+function mapentity:hash()
+	return bor(shl(self.mx,4),self.my)
+end
+
 toggleentity=class({
 	extends=mapentity,
 	m_on=0,m_off=0,
-	down_ct=0,
-	chain=nil,
-	parent=function(self,child)
-		self.chain=self.chain or {}
-		add(self.chain,child)
-	end,	
-	swap_states=function(self)
-		self.m_on,self.m_off=self.m_off,self.m_on
-	end,
-	on_on=function(self)
-		mset(self.mx,self.my,self.m_on)
-	end,
-	on_off=function(self)
-		mset(self.mx,self.my,self.m_off)
-	end,
-	push=function(self,sender)
-		sender=sender or {}
-		if not self.set[sender] then
-			self.set[sender]=sender
-			if self.down_ct==0 then
-				self:on_on()
-				recalc_all_guns()
-			end
-			self.down_ct+=1
+	down_ct=0
+})
+
+function toggleentity:parent(child)
+	add(self.chain,child)
+end
+
+function toggleentity:swap_states()
+	self.m_on,self.m_off=self.m_off,self.m_on
+end
+
+function toggleentity:on_on()
+	mset(self.mx,self.my,self.m_on)
+end
+
+function toggleentity:on_off()
+	mset(self.mx,self.my,self.m_off)
+end
+
+function toggleentity:push(sender)
+	sender=sender or {}
+	self.set=self.set or {}
+	if not self.set[sender] then
+		self.set[sender]=sender
+		if self.down_ct==0 then
+			self:on_on()
+			recalc_all_guns()
 		end
-		if self.chain then
-			for c in all(self.chain) do
-				c:push(sender)
-			end
-		end
-	end,
-	pop=function(self,sender)
-		if self.set[sender] then
-			self.set[sender]=nil
-			self.down_ct-=1
-			if self.down_ct==0 then
-				self:on_off()
-				recalc_all_guns()
-			end
-		end
-		if self.chain then
-			for c in all(self.chain) do
-				c:pop(sender)
-			end
+		self.down_ct+=1
+	end
+	if self.chain then
+		for c in all(self.chain) do
+			c:push(sender)
 		end
 	end
-})
+end
+
+function toggleentity:pop(sender)
+--
+	if self.set[sender] then
+		self.set[sender]=nil
+		self.down_ct-=1
+		if self.down_ct==0 then
+			self:on_off()
+			recalc_all_guns()
+		end
+	end
+	if self.chain then
+		for c in all(self.chain) do
+			c:pop(sender)
+		end
+	end
+end
 
 -- breadth first search for
 -- children of the same mget
-function
-toggleentity:bfs_chain()
---
-		
-	-- x and y are constrained
-	-- to map coordinates
-	-- so we can happily
-	-- store them in 8 bits
-	-- 4 each
-	local hash=function(x,y)
-		return bor(shl(x,4),y)
-	end
-	
-	local unhash=function(h)
-		return band(shr(h,4),0xf),
-			band(h,0xf)
-	end
-	
-	local q={hash(self.mx,self.my)}
+function toggleentity:bfs_chain()
+	local q={hash_xy(self.mx,self.my)}
 	local found={}
 	
 	local offsets={
@@ -150,16 +163,16 @@ toggleentity:bfs_chain()
 		end
 		
 		found[id]=true
-		local x,y=unhash(id)
+		local x,y=unhash_xy(id)
 		
-		local e=find_entity(x,y)
+		local e=mapent(x,y)
 
 		if e then
 			for o in all(offsets) do
 				local ox,oy=o.x+x,o.y+y
-				local oid=hash(ox,oy)
+				local oid=hash_xy(ox,oy)
 				if not found[oid] then
-					local child=find_entity(
+					local child=mapent(
 						ox,oy)
 					if child and child.name==e.name then
 						e:parent(child)
@@ -169,7 +182,6 @@ toggleentity:bfs_chain()
 			end
 		end
 	end
-
 end
 
 door=class({
@@ -189,28 +201,30 @@ switch=class({
 	name="switch",
 	w=2,h=2,
 	m_on=33,m_off=32,
-	target=nil,
-	on_enter=function(self,sender)
-		self:push(sender)
-	end,
-	on_exit=function(self,sender)
-		self:pop(sender)
-	end,
-	on_on=function(self)
-		toggleentity.on_on(self)
---		mset(self.mx,self.my,self.mv+1)
-		if self.target then
-			self.target:push(self)
-		end
-	end,
-	on_off=function(self)
-		toggleentity.on_off(self)
---		mset(self.mx,self.my,self.mv)
-		if self.target then
-			self.target:pop(self)
-		end
-	end
+	target=nil
 })
+
+function switch:on_enter(sender)
+	self:push(sender)
+end
+
+function switch:on_exit(sender)
+	self:pop(sender)
+end
+
+function switch:on_on()
+	toggleentity.on_on(self)
+	for c in all(self.chain) do
+		c:push(self)
+	end
+end
+
+function switch:on_off()
+	toggleentity.on_off(self)
+	for c in all(self.chain) do
+		c:pop(self)
+	end
+end
 
 gun=class({
 	extends=toggleentity,
@@ -276,7 +290,7 @@ function gun:calc()
 		if emap_add_fn(mget(wx,wy))==add_mirror
 		then
 			add_world(wx,wy)
-			local e=find_entity(wx,wy)
+			local e=mapent(wx,wy)
 			d=e:reflect(d)
 			if d==-1 then
 				break
@@ -285,9 +299,13 @@ function gun:calc()
 		end
 	end
 	
-	entity=find_entity(wx,wy)
-	if entity then
-		entity:push()
+	entity=mapent(wx,wy)
+	if entity~=self.powered then
+		if self.powered then
+			self.powered:pop()
+		end
+		self.powered=entity
+		self.powered:push()
 	end
 	
 	add(self.points,
@@ -399,6 +417,7 @@ mirror=class({
 })
 
 function mirror:on_on()
+	log(#self.chain)
 	self.d=(self.d+1)%4
 	local mv=38
 	if (self.mv==38) mv=54
@@ -434,6 +453,12 @@ end
 
 function add_entity(e)
 	local ret=add(entities,e)
+	if is_map_entity(e) then
+		e.chain={}
+	 local h=hash_xy(e.mx,e.my)
+	 assert(not mapentities[h])
+	 mapentities[h]=e
+	end
 	if e.on_draw then
 		add(drawables,e)
 	end
@@ -442,6 +467,10 @@ end
 
 function del_entity(e)
 	del(entities,e)
+	if is_map_entity(e) then
+		local h=hash_xy(e.mx,e.my)
+		mapentities[h]=nil
+	end
 	if e.on_draw then
 		del(drawables,e)
 	end
@@ -569,13 +598,14 @@ function _init()
 	gun_wait_calc=true
 
 	entities={}
+	mapentities={}
 	drawables={}
 	players={}
 	
 	g_pid=0
 	
-	for x=0,15 do
-		for y=0,15 do
+	for y=0,15 do
+		for x=0,15 do
 			local m=mget(x,y)
 			local add_fn=emap_add_fn(m)
 			add_fn(x,y,m)
@@ -584,30 +614,29 @@ function _init()
 	
 	-- configure entities
 	
-	local d1=find_entity(7,12)
-	local d2=find_entity(7,11)
-	d1:parent(d2)
+	local d1=mapent(7,12)
+	d1:bfs_chain()
 	
-	local s1=find_entity(5,11)
-	local s2=find_entity(9,13)
-	s1.target=d1
-	s2.target=d1
+	local s1=mapent(5,11)
+	local s2=mapent(9,13)
+	s1:parent(d1)
+	s2:parent(d1)
 	
-	local b1=find_entity(11,10)
-	b1:parent(find_entity(11,9))
+	local b1=mapent(11,10)
+	b1:bfs_chain()
 	
-	find_entity(12,11).target=b1
-	find_entity(10,8).target=b1
+	mapent(12,11):parent(b1)
+	mapent(10,8):parent(b1)
 	
-	s1=find_entity(14,5)
-	s1.target=find_entity(11,2)
+	s1=mapent(14,5)
+	s1:parent(mapent(11,2))
 	
-	find_entity(10,4).target=find_entity(9,4)
+	mapent(10,4):parent(mapent(9,4))
 	
-	local asdf=find_entity(4,8)
+	local asdf=mapent(4,8)
 	asdf:bfs_chain()
 	
-	find_entity(5,11).target=asdf
+	mapent(5,8):parent(asdf)
 	
 	recalc_all_guns()
 end
@@ -680,11 +709,10 @@ function _draw()
 	draw_watches()
 end
 
-function find_entity(x,y)
-	for e in all(entities) do
-		if e.mx==x and e.my==y then
-			return e
-		end
+function mapent(x,y)
+	local h=hash_xy(x,y)
+	if mapentities[h] then
+		return mapentities[h]
 	end
 	return nil
 end
@@ -892,7 +920,7 @@ __map__
 1000003030000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003030000000000000120000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003030000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1000003131000026003720000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1000003131000026003720000100001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003131000000300000000000201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003131360000002727000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003131000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
