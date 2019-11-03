@@ -2,7 +2,10 @@ pico-8 cartridge // http://www.pico-8.com
 version 18
 __lua__
 function _init()
+	poke(0x5f2d,1)
+
 	idx=0
+	f=0
 end
 
 function _update()
@@ -13,6 +16,8 @@ function _update()
 			pal(i,(idx*128)+i,1)
 		end
 	end
+	
+	f+=1
 end
 
 function _draw()
@@ -23,6 +28,8 @@ function _draw()
 		local y=flr(c/4)*32
 		rectfill(x,y,x+31,y+31,c)
 	end
+	
+	circ(stat(32),stat(33),1,f%16)
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

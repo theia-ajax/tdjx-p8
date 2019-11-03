@@ -23,10 +23,6 @@ function dist(x1,y1,x2,y2)
 	return sqrt(dist2(x1,y1,x2,y2))
 end
 
-function sqr(n)
-	return n*n
-end
-
 function angle_to(ox,oy,tx,ty)
 	return atan2(tx-ox,ty-oy)
 end
@@ -149,6 +145,12 @@ function botright(o)
 	return o.x+max(o.w-1,0),o.y+max(o.h-1,0)
 end
 
+function bounds(o)
+	local x1,y1=topleft(o)
+	local x2,y2=botright(o)
+	return x1,y1,x2,y2
+end
+
 function rect_draw(r,c,f)
 	f=f or rect
 	local x1,y1=topleft(r)
@@ -219,6 +221,27 @@ function rect_coll(a,b)
 end
 
 
+-- convert cardinal direction
+-- to x,y unit velocity
+-- param d: input direction
+-- values correspond to:
+-- 0: left (-1,0)
+-- 1: right (1,0)
+-- 2: up (0,-1)
+-- 3: down (0,1)
+-- all other inputs: (0,0)
+-- optional table lets you
+-- override cardinal direction
+-- mapping
+function cardinal(d,table)
+	table=table or _cardinal
+	d=d or 9
+	return table[d*2+1] or 0,
+		table[d*2+2] or 0
+end
+_cardinal={-1,0,1,0,0,-1,0,1}
+
+
 -->8
 -- gamestates
 
@@ -275,10 +298,12 @@ function log(m,c)
 end
 
 function draw_log()
-	local n=#_logs
-	for i=1,n do
-		local l=_logs[i]
-		print(l.m,127-#l.m*4,(i-1)*6,l.c)
+	if peek(0x5f2d) then
+		local n=#_logs
+		for i=1,n do
+			local l=_logs[i]
+			print(l.m,127-#l.m*4,(i-1)*6,l.c)
+		end
 	end
 end
 
@@ -292,14 +317,15 @@ function watch(m,c)
 end
 
 function draw_watches()
-	local n=#_watches
-	for i=1,n do
-		local w=_watches[i]
-		print(w.m,0,(i-1)*6,w.c)
+	if peek(0x5f2d) then
+		local n=#_watches
+		for i=1,n do
+			local w=_watches[i]
+			print(w.m,0,(i-1)*6,w.c)
+		end
 	end
 	_watches={}
 end
-
 
 -->8
 -- coroutines/sequences
