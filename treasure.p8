@@ -5,6 +5,344 @@ __lua__
 
 k_pit=48
 
+function _init()
+	poke(0x5f2d,1)
+	poke(0x5f2e,1)
+		
+	levels={
+		{
+			x=0,y=0,
+			config=config_level_1
+		},
+	}
+	
+	gamestates={
+		play={
+			init=play_init,
+			update=play_update,
+			draw=play_draw
+		}
+	}
+	
+	set_gamestate("play")
+end
+
+debug_colliders=false
+function keypress(key)
+	if key=="k" then
+		debug_colliders=not debug_colliders
+	end
+end
+
+function _update()
+	dt=fps30_dt
+	
+	while stat(30) do
+		keypress(stat(31))
+	end
+	
+	tick_sequences()
+	gamestate_update()
+
+	watch(band(stat(0)/204.8,0xffff.f).."%")
+	watch(band(stat(1)/100,0xffff).."%")
+	watch(band(stat(2)/100,0xffff).."%")
+end
+
+k_special_palette={
+	133,140,130,137, -- 01-04
+	nil,nil,nil,nil, -- 05-08
+	nil,nil,nil,nil, -- 09-12
+	nil,135,nil,nil, -- 13-16
+}
+
+function _draw()
+	for k,v in pairs(k_special_palette) do
+		pal(k,v,1)
+	end
+	cls()
+
+	gamestate_draw()
+
+	draw_log()
+	draw_watches()
+end
+
+function play_init()
+	g={
+		gun_wait_flag=true,
+		level=1,
+		checkpoint_lock=false,
+		checkpoint=nil,
+		input_lock=false,
+	}
+	
+	sequence(play_reset)
+end
+
+function play_reload()
+	reload(0x2000,0x2000,0x1000)
+	g.checkpoint_lock=true
+	sequence(play_reset)
+end
+
+function play_reset()
+	entities={}
+	mapentities={}
+	drawables={}
+	players={}
+ goals={}
+	
+	g.gun_wait_flag=true
+	g.input_lock=true
+	
+	g_pid=0
+	
+	local level=levels[g.level]
+	assert(level,"no known level with id:"..tostr(g.level))
+	
+	local bx,by=level.x,level.y
+
+	-- iterate over map tiles
+	-- spawn entities based
+	-- on the entity map (_emap page #3)
+	for y=bx,bx+15 do
+		for x=by,by+15 do
+			local m=mget(x,y)
+			local add_fn=emap_add_fn(m)
+			add_fn(x,y,m)
+		end
+	end
+	
+	-- if the level defines a 
+	-- config function call it
+	-- this will chain entities
+	-- together for logic
+	-- e.g. switches to doors etc...
+	if level.config then
+		level.config()
+	end
+	
+	-- calculate lasers
+	calculate_lasers()
+	
+	-- unlock checkpoint assignment
+	-- and set active checkpoint
+	-- to found checkpoint when
+	-- spawning entities if found	
+	g.checkpoint_lock=false
+	if g.checkpoint then
+		set_checkpoint(g.checkpoint)
+		wait_sec(1)
+		g.checkpoint:spawn()
+	end
+	
+	g.input_lock=false
+end
+
+function play_update()
+	local n=#entities
+	
+	for i=1,n do
+		local e=entities[i]
+		if e and e.on_update then
+			e:on_update(dt)
+		end
+	end
+	
+	local n=#drawables
+
+	for j=1,3 do
+		for i=1,n-1 do
+			if drawables[i].y>drawables[i+1].y
+			then
+				local t=drawables[i]
+				drawables[i]=drawables[i+1]
+				drawables[i+1]=t
+			end
+		end
+	end
+end
+
+function check_win()
+ local win=true
+ for id,goal in pairs(goals) do
+  if not goal.on then
+   win=false
+  end
+ end
+ 
+ if win then
+  play_reload()
+ end
+end
+
+function play_draw()
+	cls(1)
+	
+	map(0,0,0,0,16,16)
+	
+	palt(0,false)
+	map(0,0,0,0,16,16,0x80)
+	palt()
+	
+	foreach(drawables,function(e)
+		if (e.on_draw) e.on_draw(e)
+		if debug_colliders then
+			--rect_draw(e,10)
+			local r={x=e.x+(e.cx or 0),
+				y=e.y+(e.cy or 0),
+				w=e.cw or e.w,h=e.ch or e.h}
+			rect_draw(r,10)
+		end
+	end)
+
+	map(0,0,0,0,16,16,0x40)
+	
+	if btn(4,0) or btn(4,1)
+	then
+		draw_power_lines()
+	end
+end
+
+function draw_power_lines()
+	function helper(node)
+		for c in all(node.chain) do
+			line(node.x,node.y,
+				c.x,c.y,12)
+			helper(c)
+			pset(c.x,c.y,10)
+		end
+	end
+	for e in all(entities) do
+		if e.etype=="switch" or
+			e.etype=="power_switch"
+		then
+			helper(e)
+		end
+	end
+end
+-->8
+-- utilities/actors
+
+function move_actor(self,dx,dy)
+	-- do physics	
+	
+	local x=function() return self.x+self.cx end
+	local y=function() return self.y+self.cy end
+	local w=self.cw
+	local h=self.ch
+	
+	--[[
+	if solid_area(self.x+dx,
+		self.y+dy,
+		w,h)
+	then
+		dx,dy=0,0
+	end
+	
+	self.x+=dx
+	self.y+=dy]]
+
+	-- x movement
+	local dirx=sgn(dx)
+	local col_ox=dirx*w
+	-- search an extra pixel ahead
+	-- when moving left
+	if (col_ox<0) col_ox-=1
+	
+	local nx=x()+dx+col_ox
+
+	local chkx=x()+dx+col_ox				
+	if not solid(chkx,y()-h+1) and
+		not solid(chkx,y()+h-1)
+	then
+		-- no contact, move normally
+		self.x+=dx
+	else
+		-- hit solid
+		-- find contact point
+		while not solid(x()+col_ox,y()-h+1)
+			and not solid(x()+col_ox,y()+h-1)
+		do
+			self.x+=dirx*1
+		end
+	end
+
+	-- y movement
+	local diry=sgn(dy)
+	local col_oy=diry*h
+	-- search an extra pixel ahead
+	-- when moving left
+	if (col_oy<0) col_oy-=1
+		
+	local ny=y()+dy+col_oy
+
+	local chky=y()+self.dy+col_oy
+	if not solid(x()-w+1,chky)
+		and not solid(x()+w-1,chky)
+	then
+		-- no contact, move normally
+		self.y+=dy
+	else
+		-- hit solid
+		-- find contact point
+		while not solid(x()-w+1,y()+col_oy)
+			and not solid(x()+w-1,y()+col_oy)
+		do
+			self.y+=diry*1
+		end
+	end
+end
+
+function solid_world(x,y)
+	return fget(mget(x,y),0)
+		or x<0 or x>127
+		or y<0 or y>63
+end
+
+function solid(x,y)
+	return fget(mget(x/8,y/8),0)
+end
+
+function nofloor(x,y)
+	return fget(mget(x/8,y/8),7)
+end
+
+function area_fn(x,y,w,h,fn,t)
+	t=t or "any"
+	local r={x=x,y=y,w=w,h=h}
+	local x1,y1=topleft(r)
+	local x2,y2=botright(r)
+	local ret={fn(x1,y1),
+		fn(x2,y1),
+		fn(x1,y2),
+		fn(x2,y2)}
+	if t=="any" then
+		for r in all(ret) do
+			if r then
+				return true
+			end
+		end
+		return false
+	elseif t=="all" then
+		for r in all(ret) do
+			if not r then
+				return false
+			end
+		end
+		return true
+	end
+end
+
+function solid_area(x,y,w,h)
+	return area_fn(x,y,w,h,solid)
+end
+
+function nofloor_area(x,y,w,h)
+	return area_fn(x,y,w,h,nofloor,"all")
+end
+
 -- x and y are constrained
 -- to map coordinates
 -- so we can happily
@@ -18,6 +356,8 @@ function unhash_xy(h)
 	return shr(band(h,0xf0),4),
 		band(h,0xf)
 end
+-->8
+-- entities
 
 entity=class({
 	etype="entity",
@@ -83,7 +423,6 @@ end
 
 toggleentity=class({
 	extends=mapentity,
-	on=false,
 	m_on=0,m_off=0,
 	blocker=false,
 	down_ct=0,
@@ -106,17 +445,17 @@ end
 function toggleentity:on_on(sender)
 	mset(self.mx,self.my,self.m_on)
 	if self.blocker then
-		recalc_all_guns()
+		calculate_lasers()
 	end
-	self.on=true
+ self.on=true
 end
 
 function toggleentity:on_off(sender)
 	mset(self.mx,self.my,self.m_off)
 	if self.blocker then
-		recalc_all_guns()
+		calculate_lasers()
 	end
-	self.on=false
+ self.on=false
 end
 
 function toggleentity:push(sender)
@@ -247,108 +586,90 @@ gun=class({
 	frames=0,
 })
 
-function gun:on_update()
-	if self.on then
-		self.frames-=1
-		if false and self.frames<=0 then
-			-- fire
-			local dx,dy=d_to_xy(self.d,1)
-			add_entity(bullet:new({
-				x=self.x,y=self.y,
-				mx=self.mx,my=self.my,
-				w=2,h=2,
-				dx=dx,dy=dy,
-				t=240
-			}))
-			self.frames+=self.interval
-		end
-	end
-end
-
 function gun:calc()
-	self.points={}
-	
-	if not self.on or g.gun_wait_flag then
-		return
-	end
-	
-	if self.laser_cr then
-		del(sequences,self.laser_cr)
-	end
-	
-	self.laser_cr=sequence(function()
-	add(self.points,
-		{x=self.x,y=self.y})
+ self.points={}
+ 
+ if not self.on or g.gun_wait_flag then
+  return
+ end
+ 
+ if self.laser_cr then
+  del(sequences,self.laser_cr)
+ end
+ 
+ self.laser_cr=sequence(function()
+ add(self.points,
+  {x=self.x,y=self.y})
 
-	pts=self.points
-	local add_world=function(wx,wy,dx,dy)
-		local x=wx*8+4
-		local y=wy*8+4
+ pts=self.points
+ local add_world=function(wx,wy,dx,dy)
+  local x=wx*8+4
+  local y=wy*8+4
 
-		add(pts,{x=x,y=y})
-	end
-	
-	local d=self.d
-	local wx,wy=self.mx,self.my
-	local dx,dy=d_to_xy(self.d)
-	
-	local short_stop=false
-	
-	local laser_solid=function(wx,wy)
-		local v=mget(wx,wy)
-		local exclude=
-			emap_add_fn(v)==add_mirror
-		return solid_world(wx,wy) and
-			not exclude
-	end
-	
-	while not laser_solid(wx+dx,wy+dy) do
-		wx+=dx
-		wy+=dy
-		
-		if emap_add_fn(mget(wx,wy))==add_mirror
-		then
-			
-			add_world(wx,wy,dx,dy)
-			wait_sec(0.1)
-			local e=mapent(wx,wy)
-			d=e:reflect(d)
-			if d==-1 then
-				short_stop=true
-				break
-			end
-			dx,dy=d_to_xy(d)
-		end
-	end
-	
-	local xx,yy=dx*4,dy*4
-	if (dx>0) xx-=1
-	if (dy>0) yy-=1
-	if short_stop then
-		xx,yy=0,0
-	end
-	
-	add(self.points,
-		{x=wx*8+4+xx,y=wy*8+4+yy})
-		
-	entity=mapent(wx+dx,wy+dy)
-	if entity~=self.powered then
-		wait_sec(0.25)
-		if self.powered then
-			self.powered:pop(self)
-		end
-		if not entity or
-			entity.etype~="power_switch"
-		then
-			self.powered=nil
-		else
-			self.powered=entity
-			self.powered:push(self)
-		end
-	end
-	
-	
-	end)
+  add(pts,{x=x,y=y})
+ end
+ 
+ local d=self.d
+ local wx,wy=self.mx,self.my
+ local dx,dy=d_to_xy(self.d)
+ 
+ local short_stop=false
+ 
+ local laser_solid=function(wx,wy)
+  local v=mget(wx,wy)
+  local exclude=
+   emap_add_fn(v)==add_mirror
+  return solid_world(wx,wy) and
+   not exclude
+ end
+ 
+ while not laser_solid(wx+dx,wy+dy) do
+  wx+=dx
+  wy+=dy
+  
+  if emap_add_fn(mget(wx,wy))==add_mirror
+  then
+   
+   add_world(wx,wy,dx,dy)
+   wait_sec(0.1)
+   local e=mapent(wx,wy)
+   d=e:reflect(d)
+   if d==-1 then
+    short_stop=true
+    break
+   end
+   dx,dy=d_to_xy(d)
+  end
+ end
+ 
+ local xx,yy=dx*4,dy*4
+ if (dx>0) xx-=1
+ if (dy>0) yy-=1
+ if short_stop then
+  xx,yy=0,0
+ end
+ 
+ add(self.points,
+  {x=wx*8+4+xx,y=wy*8+4+yy})
+  
+ entity=mapent(wx+dx,wy+dy)
+ if entity~=self.powered then
+  wait_sec(0.25)
+  if self.powered then
+   self.powered:pop(self)
+  end
+  if not entity or
+   entity.etype~="power_switch"
+  then
+   self.powered=nil
+  else
+   self.powered=entity
+   self.powered:push(self)
+  end
+ end
+ 
+ 
+ end)
 end
 
 
@@ -392,7 +713,7 @@ function gun:intersect_laser(r)
 	return false
 end
 
-function recalc_all_guns()
+function calculate_lasers()
 	g.gun_wait_flag=false
 	for e in all(entities) do
 		if e.calc then
@@ -435,7 +756,12 @@ function d_to_xy(d,m)
 end
 
 function player:on_update(dt)
-	local ix,iy=input_xy(self.id)
+	local ix,iy=0,0
+	
+	if not g.input_lock
+	then
+		ix,iy=input_xy(self.id)
+	end
 	
 	local speed=30*dt
 	self.dx=ix*speed
@@ -450,7 +776,7 @@ function player:on_update(dt)
 	}
 	
 	if nofloor_area(cr.x,cr.y,cr.w,cr.h) then
-		reset()
+		play_reload()
 	end
 	
 	for e in all(entities) do
@@ -511,11 +837,11 @@ function mirror:push(sender)
 	if (self.mv==55) mv=39
 	self.mv=mv
 	mset(self.mx,self.my,self.mv)
-	recalc_all_guns()
+	calculate_lasers()
 end
 
 function mirror:on_off()
-	recalc_all_guns()
+	calculate_lasers()
 end
 
 refl_tt={}
@@ -533,88 +859,6 @@ power_switch=class({
 	etype="power_switch",
 	m_on=20,m_off=19,
 })
-
-function load_level()
-	
-end
-
-function reset()
-	reload(0x2000,0x2000,0x1000)
-	g.checkpoint_lock=true
-	play_reset()
-end
-
-function play_init()
-	g={
-		gun_wait_flag=true,
-		level={
-			x=0,y=0
-		},
-		checkpoint_lock=false,
-		checkpoint=nil
-	}
-	
-	play_reset()
-end
-
-function play_reset()
-	entities={}
-	mapentities={}
-	drawables={}
-	players={}
-	goals={}
-	
-	g.gun_wait_flag=true
-	
-	g_pid=0
-	
-	for y=0,15 do
-		for x=0,15 do
-			local m=mget(x,y)
-			local add_fn=emap_add_fn(m)
-			add_fn(x,y,m)
-		end
-	end
-	
-	-- configure entities
-	mapent(8,5):parent(mapent(7,4))
-	mapent(8,5):parent(mapent(6,7))
-	local d1=mapent(7,12)
-	d1:bfs_chain()
-	
-	local s1=mapent(5,11)
-	local s2=mapent(9,13)
-	s1:parent(d1)
-	s2:parent(d1)
-	
-	local b1=mapent(11,10)
-	mapent(11,10):parent(mapent(11,9))
-	b1:bfs_chain()
-	
-	mapent(12,11):parent(b1)
-	mapent(10,8):parent(b1)
-	
-	local asdf=mapent(4,8)
-	asdf:bfs_chain()
-	
-	mapent(5,8):parent(asdf)
---	mapent(5,8):parent(mapent(7,2))
-
-	s1=mapent(9,2)
-	s2=mapent(5,2)
-	d1=mapent(8,2)
-	d1:bfs_chain()
-	s1:parent(d1)
-	s2:parent(d1)
-
-	g.checkpoint_lock=false
-	if g.checkpoint then
-		set_checkpoint(g.checkpoint)
-		g.checkpoint:spawn()
-	end
-	
-	recalc_all_guns()
-end
 
 checkpoint=class({
 	extends=toggleentity,
@@ -646,39 +890,25 @@ function set_checkpoint(checkpoint)
 end
 
 goal=class({
-	extends=toggleentity
+ extends=toggleentity
 })
 
 function goal:on_enter(sender)
-	if sender.id==self.id then
-		self:push(sender)
-	end
+ if sender.id==self.id then
+  self:push(sender)
+ end
 end
 
 function goal:on_exit(sender)
-	if sender.id==self.id then
-		self:pop(sender)
-	end
+ if sender.id==self.id then
+  self:pop(sender)
+ end
 end
 
 function goal:on_on(sender)
-	toggleentity.on_on(self)
-	check_win()
+ toggleentity.on_on(self)
+ check_win()
 end
-
-function check_win()
-	local win=true
-	for id,goal in pairs(goals) do
-		if not goal.on then
-			win=false
-		end
-	end
-	
-	if win then
-		reset()
-	end
-end
-	
 
 function add_entity(e)
 	local ret=add(entities,e)
@@ -831,129 +1061,24 @@ function add_checkpoint(x,y,m)
 end
 
 function add_goal(x,y,m)
-	local ctx=emap_context(m)
-	
-	local id=ctx.id or 0
-	
-	assert(not goals[pid],
-		"only 1 goal per player id per level.")
-	
-	local g=add_entity(goal:new({
-		mx=x,my=y,m=m,
-		id=id,
-		m_off=m,m_on=m+2,
-		x=x*8+4,y=y*8+4,w=3,h=2,cy=1
-	}))
-	
-	goals[id]=g
-	
-	return g
-end	
-
-function _init()
-
-	poke(0x5f2d,1)
-	poke(0x5f2e,1)
-
-	play_init()
-end
-
-debug_colliders=false
-function keypress(key)
-	if key=="k" then
-		debug_colliders=not debug_colliders
-	end
-end
-
-function _update()
-	dt=fps30_dt
-	
-	while stat(30) do
-		keypress(stat(31))
-	end
-	
-	tick_sequences()
-
-	local n=#entities
-	
-	for i=1,n do
-		local e=entities[i]
-		if e and e.on_update then
-			e:on_update(dt)
-		end
-	end
-	
-	local n=#drawables
-
-	for j=1,3 do
-		for i=1,n-1 do
-			if drawables[i].y>drawables[i+1].y
-			then
-				local t=drawables[i]
-				drawables[i]=drawables[i+1]
-				drawables[i+1]=t
-			end
-		end
-	end
-	
-	watch(band(stat(0)/204.8,0xffff.f).."%")
-	watch(band(stat(1)/100,0xffff).."%")
-	watch(band(stat(2)/100,0xffff).."%")
-end
-
-function _draw()
-	pal(1,133,1)
-	pal(3,130,1)
-	pal(4,128+9,1)
-	pal(2,128+12,1)
-	pal(14,135,1)
-	cls(1)
-	
-	map(0,0,0,0,16,16)
-	
-	palt(0,false)
-	map(0,0,0,0,16,16,0x80)
-	palt()
-	
-	foreach(entities,function(e)
-		if (e.on_draw) e.on_draw(e)
-		if debug_colliders then
-			--rect_draw(e,10)
-			local r={x=e.x+(e.cx or 0),
-				y=e.y+(e.cy or 0),
-				w=e.cw or e.w,h=e.ch or e.h}
-			rect_draw(r,10)
-		end
-	end)
-
-	map(0,0,0,0,16,16,0x40)
-	
-	if btn(4,0) or btn(4,1)
-	then
-		draw_power_lines()
-	end
-	
-	draw_log()
-	draw_watches()
-end
-
-function draw_power_lines()
-	function helper(node)
-		for c in all(node.chain) do
-			line(node.x,node.y,
-				c.x,c.y,12)
-			helper(c)
-			pset(c.x,c.y,10)
-		end
-	end
-	for e in all(entities) do
-		if e.etype=="switch" or
-			e.etype=="power_switch"
-		then
-			helper(e)
-		end
-	end
-end
+ local ctx=emap_context(m)
+ 
+ local id=ctx.id or 0
+ 
+ assert(not goals[pid],
+  "only 1 goal per player id per level.")
+ 
+ local g=add_entity(goal:new({
+  mx=x,my=y,m=m,
+  id=id,
+  m_off=m,m_on=m+2,
+  x=x*8+4,y=y*8+4,w=3,h=2,cy=1
+ }))
+ 
+ goals[id]=g
+ 
+ return g
+end 
 
 function mapent(x,y)
 	local h=hash_xy(x,y)
@@ -961,124 +1086,6 @@ function mapent(x,y)
 		return mapentities[h]
 	end
 	return nil
-end
--->8
-function move_actor(self,dx,dy)
-	-- do physics	
-	
-	local x=function() return self.x+self.cx end
-	local y=function() return self.y+self.cy end
-	local w=self.cw
-	local h=self.ch
-	
-	--[[
-	if solid_area(self.x+dx,
-		self.y+dy,
-		w,h)
-	then
-		dx,dy=0,0
-	end
-	
-	self.x+=dx
-	self.y+=dy]]
-
-	-- x movement
-	local dirx=sgn(dx)
-	local col_ox=dirx*w
-	-- search an extra pixel ahead
-	-- when moving left
-	if (col_ox<0) col_ox-=1
-	
-	local nx=x()+dx+col_ox
-
-	local chkx=x()+dx+col_ox				
-	if not solid(chkx,y()-h+1) and
-		not solid(chkx,y()+h-1)
-	then
-		-- no contact, move normally
-		self.x+=dx
-	else
-		-- hit solid
-		-- find contact point
-		while not solid(x()+col_ox,y()-h+1)
-			and not solid(x()+col_ox,y()+h-1)
-		do
-			self.x+=dirx*1
-		end
-	end
-
-	-- y movement
-	local diry=sgn(dy)
-	local col_oy=diry*h
-	-- search an extra pixel ahead
-	-- when moving left
-	if (col_oy<0) col_oy-=1
-		
-	local ny=y()+dy+col_oy
-
-	local chky=y()+self.dy+col_oy
-	if not solid(x()-w+1,chky)
-		and not solid(x()+w-1,chky)
-	then
-		-- no contact, move normally
-		self.y+=dy
-	else
-		-- hit solid
-		-- find contact point
-		while not solid(x()-w+1,y()+col_oy)
-			and not solid(x()+w-1,y()+col_oy)
-		do
-			self.y+=diry*1
-		end
-	end
-end
-
-function solid_world(x,y)
-	return fget(mget(x,y),0)
-		or x<0 or x>127
-		or y<0 or y>63
-end
-
-function solid(x,y)
-	return fget(mget(x/8,y/8),0)
-end
-
-function nofloor(x,y)
-	return fget(mget(x/8,y/8),7)
-end
-
-function area_fn(x,y,w,h,fn,t)
-	t=t or "any"
-	local r={x=x,y=y,w=w,h=h}
-	local x1,y1=topleft(r)
-	local x2,y2=botright(r)
-	local ret={fn(x1,y1),
-		fn(x2,y1),
-		fn(x1,y2),
-		fn(x2,y2)}
-	if t=="any" then
-		for r in all(ret) do
-			if r then
-				return true
-			end
-		end
-		return false
-	elseif t=="all" then
-		for r in all(ret) do
-			if not r then
-				return false
-			end
-		end
-		return true
-	end
-end
-
-function solid_area(x,y,w,h)
-	return area_fn(x,y,w,h,solid)
-end
-
-function nofloor_area(x,y,w,h)
-	return area_fn(x,y,w,h,nofloor,"all")
 end
 -->8
 -- entity map
@@ -1131,21 +1138,57 @@ function emap_add_fn(v)
 	end
 	return function() end
 end
+-->8
+--
+-->8
+-- level configs
+
+function config_level_1()
+	mapent(8,5):parent(mapent(7,4))
+	mapent(8,5):parent(mapent(6,7))
+	local d1=mapent(7,12)
+	d1:bfs_chain()
+	
+	local s1=mapent(5,11)
+	local s2=mapent(9,13)
+	s1:parent(d1)
+	s2:parent(d1)
+	
+	local b1=mapent(11,10)
+	mapent(11,10):parent(mapent(11,9))
+	b1:bfs_chain()
+	
+	mapent(12,11):parent(b1)
+	mapent(10,8):parent(b1)
+	
+	local asdf=mapent(4,8)
+	asdf:bfs_chain()
+	
+	mapent(5,8):parent(asdf)
+--	mapent(5,8):parent(mapent(7,2))
+
+	s1=mapent(9,2)
+	s2=mapent(5,2)
+	d1=mapent(8,2)
+	d1:bfs_chain()
+	s1:parent(d1)
+	s2:parent(d1)
+end
 __gfx__
-0000000000077000000000000aa00000cccccccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000000007700000000000aaaa0000cdccccdc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700077777700ddddd00aaaa0000ccdccdcc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0007700000077000000d00000aa00000cccccccc0000000000dddd0000eeee000000000000000000000000000000000000000000000000000000000000000000
-0007700000077000000d000000000000cccccccc0000000003dddd300aeeeea00000000000000000000000000000000000000000000000000000000000000000
+0000000000077000000000000aa00000cccccccc000000000000000000eea0000000000000000000000000000000000000000000000000000000000000000000
+000000000007700000000000aaaa0000cdccccdc00000000000000000eeea0000000000000000000000000000000000000000000000000000000000000000000
+00700700077777700ddddd00aaaa0000ccdccdcc00000000000000000000a0000000000000000000000000000000000000000000000000000000000000000000
+0007700000077000000d00000aa00000cccccccc0000000000dddd0000eeae000000000000000000000000000000000000000000000000000000000000000000
+0007700000077000000d000000000000cccccccc0000000003dddd300aeeaea00000000000000000000000000000000000000000000000000000000000000000
 007007000077770000000dd000000000ccdccdcc0000000003dddd300aeeeea00000000000000000000000000000000000000000000000000000000000000000
 00000000007007000000000000000000cdccccdc000000000033330000aaaa000000000000000000000000000000000000000000000000000000000000000000
 00000000007007000000000000000000cccccccc0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 ddddddddccccccccc000000c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d333333dc222222c00000000000ff000000770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d333333dc222222c0000000000fddf00007ee7000000000000000000000000000077770000777700000000000000000000000000000000000000000000000000
-d333333dc222222c000000000fddddf007eeee700000000000444400002222000799997777cccc70000000000000000000000000000000000000000000000000
-d333333dc222222c000000000dddddd00eeeeee000000000046666442266662079999999ccccccc7000000000000000000000000000000000000000000000000
-d333333dc222222c00000000005dd50000aeea0000000000046666442266662079999999ccccccc7000000000000000000000000000000000000000000000000
+d333333dc222222c0000000000066000000770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d333333dc222222c0000000000633600007ee7000000000000000000000000000077770000777700000000000000000000000000000000000000000000000000
+d333333dc222222c000000000633336007eeee700000000000444400002222000799997777cccc70000000000000000000000000000000000000000000000000
+d333333dc222222c00000000033333300eeeeee000000000046666442266662079999999ccccccc7000000000000000000000000000000000000000000000000
+d333333dc222222c000000000053350000aeea0000000000046666442266662079999999ccccccc7000000000000000000000000000000000000000000000000
 d333333dc222222c0000000000055000000aa0000000000000444400002222000799997777cccc70000000000000000000000000000000000000000000000000
 ddddddddccccccccc000000c00000000000000000000000000000000000000000077770000777700000000000000000000000000000000000000000000000000
 0000000000000000dddddddddddddddddddddddddddddddd77000000000000670000000000000000000000000000000000000000000000000000000000000000
@@ -1169,7 +1212,7 @@ __gff__
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 1010101010101033101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1000003030000000000000161700001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1016173030000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003030201212122000000700001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003030000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 1000003131000027000000000037001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
