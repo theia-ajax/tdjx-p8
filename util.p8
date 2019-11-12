@@ -241,7 +241,6 @@ function cardinal(d,table)
 end
 _cardinal={-1,0,1,0,0,-1,0,1}
 
-
 -->8
 -- gamestates
 
