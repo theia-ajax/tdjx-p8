@@ -6,9 +6,38 @@ __lua__
 
 
 cols={0xfc,0xbf,0xab,0xca}
+cols={0x0c,0x0f,0x0b,0x0a}
+pattern=0x0f0f
+colors={2,8,8,9,9,10,10,7,7,7,7}
+colors={8,10,11,11,12,12,12,12}
+colors={8,9,9,10,10,10}
+
+scrp_1={
+	0,137,2,3,4,5,6,7,
+	8,9,10,11,12,13,14,136
+}
+
+scrp_2={
+	0,1,2,3,4,5,6,7,
+	8,9,10,11,12,13,14,15
+}
+
+scrps={
+	scrp_1,scrp_2
+}
+
+scrpidx=1
+
+function palswap(p)
+	for i=0,15 do
+		pal(i,p[i+1] or i,1)
+	end
+end
 
 function _init()
-	fillp(0xa5a5)
+	poke(0x5f2e,0)
+
+	palswap(scrp_1)
 
 	music(5)
 	vol={0,0,0,0}
@@ -25,8 +54,7 @@ function _init()
  		local y=-n/mxct*4+1
  		local z=sin(a)*rad
  		local r=t()/4
- 		local wx=cos(r)*x-sin(r)*z
- 		local wz=sin(r)*x+cos(r)*z+5
+ 		local wx=cos(r)*x-sin(r)*z 		local wz=sin(r)*x+cos(r)*z+5
  		local sx=64+64*wx/wz
  		local sy=64+64*y/wz
  		local rad=14-wz+1
@@ -54,6 +82,11 @@ function _update()
 	for i=0,3 do
 		if btnp(i) then
 			swap(0x5f40+i)
+			scrpidx+=1
+			if scrpidx>#scrps then
+				scrpidx=1
+			end
+			palswap(scrps[scrpidx])
 		end
 	end
 	
@@ -92,8 +125,11 @@ function lerp(a,b,t)
 end
 k_e=2.7182
 function _draw()
-	cls()
-	
+	cls(1)
+
+	draw_volume()
+
+	fillp(pattern)	
 	local vsum=0
 	for i=1,#vol do
 		vsum+=vol[i]
@@ -108,31 +144,23 @@ function _draw()
 		end
 	end
 	
-	for i=0,3 do
-		local v,n=getvol(i)
-		
-		v=v+(n or 0)
-
-		vol[i+1]=lerp(vol[i+1],v,0.4)
-		
---		local y=128-(vol[i+1]/63*128)
---		rectfill(i*32,y,(i+1)*32,128,7)
-		draw_vol(i*32,31,vol[i+1])
-	end
-
 	
 	
 end
 
-colors={2,8,8,9,9,10,10,7,7,7,7}
+
 
 function draw_vol(x,w,v)
 	local vv=v/63
-	
-	for i=0,flr(vv*128),2 do
-		local c=cols[flr(i/127*#cols)+1]
+	local coltbl=colors
+	local n=#coltbl
+
+	for i=0,flr(vv*128),1 do
+		local c=coltbl[flr(i/127*n)+1]
 		line(x,127-i,x+w,127-i,c)
 	end
+	
+	
 end
 
 function getvol(c)
@@ -169,6 +197,22 @@ function ins_when(a,o,pred)
 		end
 	end
 	return add(a,o)
+end
+
+
+function draw_volume()
+fillp()	
+	for i=0,3 do
+		local v,n=getvol(i)
+		
+		v=v+(n or 0)
+
+		vol[i+1]=lerp(vol[i+1],v,0.4)
+		
+--		local y=128-(vol[i+1]/63*128)
+--		rectfill(i*32,y,(i+1)*32,128,7)
+		draw_vol(i*32,31,vol[i+1])
+	end
 end
 __sfx__
 01040000070500a0500c0500a0500305003050030500a0000a0000a00007000050000a0000c0000a0000500005000050000300000000000000000000000000000000000000000000000000000000000000000000

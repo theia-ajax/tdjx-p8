@@ -4,7 +4,7 @@ __lua__
 function _init()
 	plr={
 		x=64,y=64,r=0,
-		w=2,h=6,
+		w=1,h=3,
 		dx=0,dy=0,
 	}
 end
@@ -12,11 +12,13 @@ end
 function _update()
 	plr.r-=0.0177
 
-	if btn(4) then
+	plr.thrust=btn(4)
+
+	if plr.thrust then
 		local r=plr.r+0.25
 		local ddx,ddy=cos(r),sin(r)
-		ddx*=-0.2
-		ddy*=-0.2
+		ddx*=-0.22
+		ddy*=-0.33
 		plr.dx+=ddx
 		plr.dy+=ddy
 	end
@@ -24,7 +26,7 @@ function _update()
 	plr.x+=plr.dx
 	plr.y+=plr.dy
 	
-	plr.dy+=0.03
+	plr.dy+=0.07
 end
 
 function _draw()
@@ -57,8 +59,12 @@ function _draw()
 	
 --	flood(plr.x,plr.y,col)
 	
-	local r=plr.r+0.25
-	line(plr.x,plr.y,plr.x+cos(r)*plr.h,plr.y+sin(r)*plr.h,7)
+	if plr.thrust then
+		local r=plr.r+0.25
+		local dx,dy=cos(r)*plr.h,sin(r)*plr.h	
+		line(plr.x+dx,plr.y+dy,
+			plr.x+dx*2,plr.y+dy*2,7)
+	end
 end
 
 function rot(x,y,r)

@@ -101,6 +101,14 @@ function m01(v)
 	return mid(v,0,1)
 end
 
+function round(v)
+	if v-flr(v)<0.5 then
+		return flr(v)
+	else
+		return ceil(v)
+	end
+end
+
 function ilerp(a,b,c)
 	local d=b-a
 	if (d==0) return 0
