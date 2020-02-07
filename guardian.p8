@@ -33,6 +33,31 @@ function _init()
 		draw=draw_player,
 	}
 	
+	chain={
+		points={},
+		links={}
+	}
+	
+	local n=6
+	for i=1,n do
+		local mass=(i==n) and 10 or 1
+		add(chain.points,
+			vertlet:new({
+				x=p.x,y=p.y+(i-1)*6,
+				mass=mass
+			}))
+	end
+	
+	for i=1,n-1 do
+		add(chain.links,
+			link:new({
+				a=chain.points[i],
+				b=chain.points[i+1],
+				rest=6,
+				stiff=0.3
+			}))
+	end
+	
 	actors={}
 	kill_q={}
 	add(actors,p)
@@ -127,6 +152,15 @@ function _update()
 		})
 	end
 	
+	for pt in all(chain.points) do
+		pt:force(0,1)
+	end
+	
+	chain.points[1].pin_x=p.x
+	chain.points[1].pin_y=p.y
+	
+	integrate(chain.points,chain.links,fps30_dt)
+	
 	--[[
 	if btnp(1) then
 		p.dx=8
@@ -201,6 +235,11 @@ function _draw()
 	cam.fx=lerp(cam.fx,p.face*16,0.21)
 	cam.x=p.x-64+cam.fx
 	camera(cam.x,cam.y)
+	
+	for link in all(chain.links) do
+		line(link.a.x,link.a.y,
+			link.b.x,link.b.y,4)
+	end
 	
 	-- draw actors
 	local l,r=cam.x,
@@ -423,6 +462,88 @@ function wrap_actor(a)
 	a.x=wrap_x(a.x)
 end
 
+-->8
+-- vertlets
+
+vertlet={
+	x=0,y=0,		-- pos
+	lx=0,ly=0,-- last pos
+	dx=0,dy=0,		-- velocity
+	ddx=0,ddy=0,-- accel
+	pin_x=nil,pin_y=nil, -- pin
+	mass=10,
+}
+
+function vertlet:new(p)
+	self.__index=self
+	p=p or {}
+	p.lx=p.x
+	p.ly=p.y
+	return setmetatable(p,self)
+end
+
+function vertlet:force(fx,fy)
+	self.ddx+=fx/self.mass
+	self.ddy+=fy/self.mass
+end
+
+link={
+	a=nil,b=nil,
+	rest=1,
+	tear=0x7fff,
+	stiff=0.4,
+}
+
+function link:new(p)
+	self.__index=self
+	return setmetatable(p or {},self)
+end
+
+function integrate(points,links,dt)
+	for i=1,4 do
+		for link in all(links) do
+			local p1,p2=link.a,link.b
+			
+			local dx,dy=p1.x-p2.x,
+				p1.y-p2.y
+				
+			local d=sqrt(dx*dx+dy*dy)
+
+			if (d>=link.tear) then
+				del(links,link)
+			end
+			
+			local diff=(link.rest-d)/d
+							
+			local tx=dx*link.stiff*diff
+			local ty=dy*link.stiff*diff
+			p1.x+=tx
+			p1.y+=ty
+	
+			p2.x-=tx
+			p2.y-=ty
+		end
+	end
+	
+	for pt in all(points) do
+		pt.dx*=0.99
+		pt.dy*=0.99
+	
+		pt.dx=pt.x-pt.lx
+		pt.dy=pt.y-pt.ly
+
+		pt.lx=pt.x
+		pt.ly=pt.y
+
+		pt.x=pt.x+pt.dx+pt.ddy*dt
+		pt.y=pt.y+pt.dy+pt.ddy*dt
+
+		if (pt.pin_x) pt.x=pt.pin_x
+		if (pt.pin_y) pt.y=pt.pin_y
+		
+		pt.ddx,pt.ddy=0,0
+	end
+end
 __gfx__
 0000000000000000000000000000000000000000008008000080080000000000bbbbbbbb00000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000880880008888000088880008808800bbbbbbbb00000000000000000000000000000000000000000000000000000000

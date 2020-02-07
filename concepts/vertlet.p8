@@ -30,7 +30,7 @@ function _init()
 				lx=px,ly=py,-- last pos
 				dx=0,dy=0,		-- velocity
 				ddx=0,ddy=20,-- accel
-				pinx=pinx,piny=piny, -- pin
+				pin_x=pin_x,pin_y=pin_y, -- pin
 				mass=10,
 				force=function(self,fx,fy)
 					self.ddx+=fx/self.mass
@@ -148,6 +148,85 @@ function _draw()
 		pset(pt.x,pt.y,7)
 	end
 
+end
+-->8
+vertlet={
+	x=px,y=py,		-- pos
+	lx=px,ly=py,-- last pos
+	dx=0,dy=0,		-- velocity
+	ddx=0,ddy=20,-- accel
+	pin_x=nil,pin_y=nil, -- pin
+	mass=10,
+}
+
+function vertlet:new(p)
+	self.__index=self
+	return setmetatable(p or {},self)
+end
+
+function vertlet:force(fx,fy)
+	self.ddx+=fx/self.mass
+	self.ddy+=fy/self.mass
+end
+
+link={
+	a=nil,b=nil,
+	rest=1,
+	tear=64,
+	stiff=0.4,
+}
+
+function link:new(p)
+	self.__index=self
+	return setmetatable(p or {},self)
+end
+
+function integrate_verts(points,links)
+	for i=1,16 do
+		for link in all(links) do
+			local p1,p2=link.a,link.b
+			
+			local dx,dy=p1.x-p2.x,
+				p1.y-p2.y
+				
+			local d=sqrt(dx*dx+dy*dy)
+		
+			if (d>=link.tear) then
+				del(links,link)
+			end
+			
+			local diff=(link.rest-d)/d
+				
+			local tx=dx*link.stiff*diff
+			local ty=dy*link.stiff*diff
+			
+			p1.x+=tx
+			p1.y+=ty
+	
+			p2.y-=tx
+			p2.y-=ty
+		
+		end
+	end
+	
+	for pt in all(points) do
+		pt.dx*=0.99
+		pt.dy*=0.99
+	
+		pt.dx=pt.x-pt.lx
+		pt.dy=pt.y-pt.ly
+
+		pt.lx=pt.x
+		pt.ly=pt.y
+		
+		pt.x=pt.x+pt.dx+pt.ddx*dt
+		pt.y=pt.y+pt.dy+pt.ddy*dt
+		
+		if (pt.pin_x) pt.x=pt.pin_x
+		if (pt.pin_y) pt.y=pt.pin_y
+		
+		pt.ddx,pt.ddy=0,0
+	end
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
