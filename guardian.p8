@@ -31,42 +31,19 @@ function _init()
 		t_bubble=1,
 		sp=32,
 		draw=draw_player,
+		on_wrap=function(self,dx)
+		end
 	}
-	
-	chain={
-		points={},
-		links={}
-	}
-	
-	local n=6
-	for i=1,n do
-		local mass=(i==n) and 10 or 1
-		add(chain.points,
-			vertlet:new({
-				x=p.x,y=p.y+(i-1)*6,
-				mass=mass
-			}))
-	end
-	
-	for i=1,n-1 do
-		add(chain.links,
-			link:new({
-				a=chain.points[i],
-				b=chain.points[i+1],
-				rest=6,
-				stiff=0.3
-			}))
-	end
 	
 	actors={}
 	kill_q={}
 	add(actors,p)
 	enemies={}
 	
-	for i=1,10 do
+	for i=1,7 do
 		local a={
 			id=i,
-			x=flr(rnd(128))-64,y=flr(rnd(48)),
+			x=flr(rnd(world.w*8))-64,y=flr(rnd(48)),
 			dx=0,dy=0,
 			ddx=0,ddy=0,
 			t0=flr(rnd(8))+8,
@@ -152,15 +129,6 @@ function _update()
 		})
 	end
 	
-	for pt in all(chain.points) do
-		pt:force(0,1)
-	end
-	
-	chain.points[1].pin_x=p.x
-	chain.points[1].pin_y=p.y
-	
-	integrate(chain.points,chain.links,fps30_dt)
-	
 	--[[
 	if btnp(1) then
 		p.dx=8
@@ -236,11 +204,6 @@ function _draw()
 	cam.x=p.x-64+cam.fx
 	camera(cam.x,cam.y)
 	
-	for link in all(chain.links) do
-		line(link.a.x,link.a.y,
-			link.b.x,link.b.y,4)
-	end
-	
 	-- draw actors
 	local l,r=cam.x,
 		cam.x+127
@@ -249,14 +212,11 @@ function _draw()
 	
 	local ww=world.w*8
 
-	local in_layer=function(a,layer)
-		return a.layer==layer
-			or a.layer==nil and layer==0
-	end
-	
+
 	local should_draw=function(a,layer)
 		return a.draw
-			and in_layer(a,layer)
+			and (a.layer==layer
+				or a.layer==nil and layer==0)
 	end
 
 	for layer=-2,2 do
@@ -306,10 +266,7 @@ function _draw()
 	map(0,0,
 					world.w*8,0,
 					buff,16)
-					
-	line(0,0,0,127,12)
-	line(world.w*8,0,world.w*8,127,12)
-		
+							
 	camera()
 	
 	-- minimap
@@ -459,7 +416,11 @@ function wrap_x(x)
 end
 
 function wrap_actor(a)
+	local x=a.x
 	a.x=wrap_x(a.x)
+	if a.on_wrap then
+		a:on_wrap(a.x-x)
+	end
 end
 
 -->8

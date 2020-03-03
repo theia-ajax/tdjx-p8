@@ -34,16 +34,7 @@ function fire()
 				 sset(x+r-1,y,c-band(r,1))
 				end
 			end
-		end
-		
-		for x=0,127 do
-			local v=max(sget(x,127)-1,0)
---			sset(x,127,v)
-		end
-		
-		while not btn(5) do
-			yield()
-		end
+		end		
 	end
 end
 
@@ -69,51 +60,10 @@ function _update()
 			del(crs,cr)
 		end
 	end
-	
-	focus_rx=42+sin(t())*6
-	focus_ry=32+cos(t()*1.2)*3
-	focus_x=sin(t()/3)*20+64
-	focus_y=cos(t()/7)*12+84
 end
 
 function _draw()
 	sspr(0,0,128,128)
-	
-	focus_t=focus_y-focus_ry-1
-	focus_b=focus_y+focus_ry
-	focus_l=focus_x-focus_rx-1
-	focus_r=focus_x+focus_rx
-
-	palt(0,false)
---	rectfill(0,0,127,focus_t,0)
---	rectfill(0,focus_b,127,127,0)
-	rectfill(0,focus_t,focus_l,focus_b,0)
-	rectfill(focus_r,focus_t,127,focus_b,0)
-	for y=focus_t,focus_b do
-		local mx=0
-		for x=focus_l,focus_x do
-			local dx,dy=x-focus_x,y-focus_y
-			local d=sqrt(dx*dx+dy*dy)
-			if d>0 then
-				local ndx,ndy=dx/d,dy/d
-				local a=atan2(ndx,ndy)
-				local rdx=focus_rx*ndx
-				local rdy=focus_ry*ndy
-				local rd=sqrt(rdx*rdx+rdy*rdy)
-				if d<=rd then
-					mx=abs(focus_x-x)
-					break
-				end
-			end
-		end
-		if mx>0 then
-			rectfill(focus_l+1,y,focus_x-mx,y,0)
-			rectfill(focus_r,y,focus_x+mx,y,0)
-		else
-			rectfill(focus_l,y,focus_r,y,0)
-		end
-	end
-	palt()
 end
 
 __gfx__
