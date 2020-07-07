@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 19
 __lua__
 -- template.p8
 -- tdjx
@@ -418,6 +418,7 @@ k_gs_hiscore = 4
 function gs_init(postsplash, fps30)
 	gs = {}
 	gs.fps30 = fps30 or false
+	gs.fps30=false
 	gs.tbl = {}
 	gs.curr = nil
 	gs.postsplash = postsplash or k_gs_play
@@ -577,7 +578,7 @@ function splash_update()
 			idel(lt.lst, 1)
 		end
 		i += 1
-		local xy = m.sin(i * 45 + t() * 300) * (max(min(splt, 120), 0) * 0.06667 * 12)
+		local xy = m.sin(i * 45 + t() * 600) * (max(min(splt, 120), 0) * 0.06667 * 12)
 		if (splt <= 0) xy = 0
 		lt.ty = 62 + xy
 		if splt <= 0 then

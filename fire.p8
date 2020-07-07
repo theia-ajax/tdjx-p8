@@ -25,7 +25,18 @@ end
 
 function fire()
 
+	la={
+		7,65,65,65,7,65,65,65
+	}
+
 	while true do
+		for y=1,8 do
+			for x=0,7 do
+				if band(la[y],shl(1,x))~=0 then
+					sset(x+50,y+49,15)
+				end
+			end
+		end
 		for y=0,126 do
 			for x=0,l do
 				c=sget(x,y+1)
