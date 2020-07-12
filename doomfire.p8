@@ -1,8 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
-version 19
+version 29
 __lua__
 function _init()
-	//cls()
+	cls()
 	memcpy(0x0000,0x6000,0x2000)
 	k={0,0,2,4,4,8,8,8,
 				9,9,10,10,10,7,7,7}
@@ -16,15 +16,9 @@ function _init()
 	
 	crs={}
 	add(crs,cocreate(fire))
-	
-	focus_x=64
-	focus_y=64
-	focus_rx=48
-	focus_ry=32
 end
 
 function fire()
-
 	while true do
 		for y=0,126 do
 			for x=0,l do
@@ -34,7 +28,8 @@ function fire()
 				 sset(x+r-1,y,c-band(r,1))
 				end
 			end
-		end		
+		end
+		yield()
 	end
 end
 
@@ -43,7 +38,7 @@ function _update()
 		cstore(0x0000,0x6000,0x2000,"doomfire.p8")
 	end
 
-	if btnp(0) then
+	if btnp(4) then
 		add(crs,cocreate(function()
 			for y=0,127 do
 				for x=0,127 do
@@ -52,6 +47,7 @@ function _update()
 			end
 		end))
 	end
+
 
 	for cr in all(crs) do
 		if cr and costatus(cr)~="dead" then

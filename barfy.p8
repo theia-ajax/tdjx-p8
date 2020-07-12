@@ -2,7 +2,6 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 function _init()
-	music(0)
 	actors={}
 	cam={x=0,y=0}
 	world_init(0,0,32,16)
