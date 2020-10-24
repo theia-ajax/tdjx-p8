@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 function _init()
+	poke(0x5f2d,1)
 	actors={}
 	cam={x=0,y=0}
 	world_init(0,0,32,16)
@@ -18,7 +19,84 @@ function barf()
 	}))
 end
 
+boxes={
+	{x0=.125,y0=.375,x1=1.375,y1=1.25},
+	{x0=.125,y0=.25,x1=1.75,y1=1.375},
+	{x0=.25,y0=.125,x1=1.875,y1=1.375},
+	{x0=.5,y0=0,x1=1.75,y1=1.5},
+	{x0=.75,y0=0,x1=1.875,y1=1.625},
+	{x0=.75,y0=0,x1=1.875,y1=1.625},
+	{x0=1.25,y0=0,x1=1.875,y1=1.875},
+	{x0=1.5,y0=0,x1=1.875,y1=1.875},
+}
+box_ed=false
+box_id=1
+box_dm=0
+
+for i=1,8 do
+	boxes[i]=boxes[i] or {x0=0,y0=0,x1=2,y1=2}
+end
+
+function box_ed_key(key)
+	local box=boxes[box_id]
+	if key=="-" then
+		box_id-=1
+		if box_id<1 then
+			box_id=8
+		end
+	elseif key=="=" then
+		box_id+=1
+		if box_id>8 then
+			box_id=1
+		end
+	elseif key=="i" then
+		box.y1-=1/8
+	elseif key=="k" then
+		box.y1+=1/8
+	elseif key=="j" then
+		box.x1-=1/8
+	elseif key=="l" then
+		box.x1+=1/8
+	elseif key=="w" then
+		box.y0-=1/8
+	elseif key=="s" then
+		box.y0+=1/8
+	elseif key=="a" then
+		box.x0-=1/8
+	elseif key=="d" then
+		box.x0+=1/8
+	elseif key=="q" then
+		box_dm-=1
+		if (box_dm<0) box_dm=2
+	elseif key=="e" then
+		box_dm+=1
+		if (box_dm>2) box_dm=0
+	elseif key=="b" then
+		cls()
+		for i,b in ipairs(boxes) do
+			print(i.." x0:"..b.x0.." y0:"..b.y0)
+			print("  x1:"..b.x1.." y1:"..b.y1)
+		end
+		flip()
+		stop()
+	end
+end
+
+function keypress(key)
+	if key=="1" then
+		box_ed=not box_ed
+	end
+	
+	if box_ed then
+		box_ed_key(key)
+	end
+end
+
 function _update()
+	while stat(30) do
+		keypress(stat(31))
+	end
+
 	local ix,iy=0,0
 	if (btn(0)) ix-=1
 	if (btn(1)) ix+=1
@@ -51,6 +129,32 @@ function _draw()
 	end
 
 	camera()
+	
+	if box_ed then
+		rectfill(16,16,112,112,0)
+		rect(16,16,112,112,6)
+		
+		local sp=(box_id-1)*2+32
+		spr(sp,56,56,2,2)
+		local box=boxes[box_id]
+		local x0=56+box.x0*8
+		local y0=56+box.y0*8
+		local x1=56+box.x1*8
+		local y1=56+box.y1*8
+		
+		if box_dm==0 then
+			fillp(0b1010010110100101.1)
+			rectfill(x0,y0,x1,y1,0x0a)
+		elseif box_dm==1 then
+			rect(x0,y0,x1,y1,10)
+		elseif box_dm==2 then
+			pset(x0,y0,10)
+			pset(x1,y0,10)
+			pset(x0,y1,10)
+			pset(x1,y1,10)
+		end
+		fillp()
+	end
 	
 	dbg_draw()
 end
@@ -231,7 +335,7 @@ function article:draw()
 	spr(self.kind+self.t0,wx,wy,1,1,fx)
 end
 
-splash=class({w=3,h=2},actor)
+splash=class({w=2,h=2},actor)
 
 function splash:init()
 	self:follow(self.owner,self.ox,self.oy)
@@ -243,6 +347,8 @@ function splash:move()
 	else
 		self.t0+=0.33
 	end
+	
+	self.x+=self.face*0.2
 	
 	if self.t0>=1 and self.t0<=3
 	then
@@ -266,6 +372,9 @@ function splash:move()
 end
 
 function splash:draw()
+	local frame=flr(min(self.t0,7.9999))
+	local b=boxes[frame+1]
+
 	local sp=32+flr(self.t0)*2
 	local spx=sp%16*8
 	local spy=flr(sp/16)*8
@@ -278,6 +387,15 @@ function splash:draw()
 	
 	sspr(spx,spy,spw,sph,
 		scx,scy,scw,sch)	
+
+	
+	
+	rect(
+		scx+b.x0*self.w*4*self.face,
+		scy+b.y0*self.h*4,
+		scx+b.x1*self.w*4*self.face,
+		scy+b.y1*self.h*4,
+		10)
 	
 --	spr(32+flr(self.t0)*2,
 --		x,y,
