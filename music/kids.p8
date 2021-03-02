@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 29
 __lua__
 -- kids - mgmt
 -- pico8 cover
@@ -270,7 +270,7 @@ __music__
 00 21191e1c
 00 221a1f23
 00 41191e44
-00 41191f44
+00 1b1a1f44
 00 41191e44
-02 41191f44
+02 1b1a1f44
 

@@ -312,17 +312,17 @@ end
 
 
 function add_spark(x,y,params)
---	params=params or {}
---	return add(effects,{
---		x=x,y=y,
---		t=0,nt=0,dur=0.35,
---		col=params.col or 10,
---		draw=function(self)
---			local v=self.nt*1.8
---			local rad=cos(v)*v*2+v+1
---			circ(self.x*8,self.y*8,rad,self.col)
---		end,
---	})
+	params=params or {}
+	return add(effects,{
+		x=x,y=y,
+		t=0,nt=0,dur=0.35,
+		col=params.col or 10,
+		draw=function(self)
+			local v=self.nt*1.8
+			local rad=cos(v)*v*2+v+1
+			circ(self.x*8,self.y*8,rad,self.col)
+		end,
+	})
 end
 
 -->8
