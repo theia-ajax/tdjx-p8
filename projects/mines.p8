@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 29
 __lua__
 
 -- mines.p8
@@ -302,9 +302,9 @@ function restart()
 end
 
 function pop_board(settings)
-	local w, h, mct = settings.w,
-		settings.h,
-		settings.mct
+	local w, h, mct = settings.width,
+		settings.height,
+		settings.mines
 
 
 	board = {}
@@ -333,7 +333,7 @@ function pop_board(settings)
 	local tw = board.w * board.cw
 	local th = board.h * board.ch
 	board.ox = (128 - tw) / 2
-	board.oy = (128 - th) / 2 + board.ch
+	board.oy = (128 - th) / 2 + board.ch -2
 
 	for i = 1, board.sz do
 		local x = (i - 1) % board.w
@@ -387,12 +387,16 @@ end
 function _init()
 	poke(0x5f2d, 1)
 
-	settings = {
-		w = 16,
-		h = 16,
-		mct = 35,
+	settings={
+		width=6,
+		height=8,
+		mines=10,
 	}
-
+	
+	menu={
+		sel=1,
+	}
+	
 	mouse = {}
 	mouse.x = 0
 	mouse.y = 0
@@ -476,7 +480,12 @@ function _draw()
 	if gs ~= k_gsmenu then
 		draw_play()
 	else
-
+		local i=0
+		for k,v in pairs(settings) do
+			local y=20+i*12
+			print(k,32,y,7)
+			i+=1
+		end
 	end
 
 	spr(5, mouse.x-3, mouse.y-3)
@@ -855,10 +864,34 @@ end
 -----------------------------------
 
 
+-->8
+
+_gs={
+	play={
+		init=play_init,
+		update=play_update,
+		draw=play_draw
+	},
+	menu={
+		init=menu_init,
+		update=menu_update,
+		draw=menu_draw
+	},
+	_active=nil,
+}
+
+function set_gs(name)
+	local state=nil
+	if (name~=nil) state=_gs[name]
+	if state~=_gs.active then
+		_gs.active=state
+		if (_gs.active.init) _gs.active.init()
+	end
+end
 __gfx__
 0000000077777777ddddddd6565656560000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000000007666666dd55555566555555505c00c500070000000040000000000000000000000000000000000000000000000000000000000000000000000000000
-007007007666666dd5555556555555550c5555c0c777c00000048800000000000000000000000000000000000000000000000000000000000000000000000000
+007007007666666dd5555556555555550c5555c0c707c00000048800000000000000000000000000000000000000000000000000000000000000000000000000
 000770007666666dd555555665555555005cc5000070000000048880000000000000000000000000000000000000000000000000000000000000000000000000
 000770007666666dd555555655555555005cc50000c0000000048800000000000000000000000000000000000000000000000000000000000000000000000000
 007007007666666dd5555556655555550c5555c00000000000040000000000000000000000000000000000000000000000000000000000000000000000000000
