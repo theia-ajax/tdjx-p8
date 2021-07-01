@@ -16,6 +16,7 @@ end
 	nudge_x=0,nudge_y=0,
 	face=1,
 	sp=1,
+	poff=0,	
 }
 
 function 😐:new(p)
@@ -23,7 +24,7 @@ function 😐:new(p)
 	return setmetatable(p or {},self)
 end
 
-function 😐:update()
+function 😐_update(self)
 	local l,t,r,b=local_rect(self)
 	
 	self.dx+=self.nudge_x
@@ -64,7 +65,12 @@ function 😐:update()
 	self.y+=self.dy
 end
 
-function 😐:draw()
+function 😐_draw(self)
+	for i=0,15 do
+		local off=self.poff==i
+		palt(i,off)
+	end
+
 	local px,py=w2s(self.x,self.y)
 	px-=self.w*8
 	py-=self.h*8
@@ -165,22 +171,19 @@ function play_init()
 	actors={}
 	
 	add(actors,😐:new({
-		x=8,y=8
+		x=8,y=8,
+		poff=14,
 	}))
 end
 
 function play_update()
-	foreach(actors,function(😐)
-		😐:update()
-	end)
+	foreach(actors,😐_update)
 end
 
 function play_draw()
-	cls()
+	cls(1)
 	
-	foreach(actors,function(😐)
-		😐:draw()
-	end)
+	foreach(actors,😐_draw)
 end
 __gfx__
 00000000e00000ee0aaaaa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
