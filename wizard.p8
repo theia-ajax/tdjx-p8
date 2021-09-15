@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 29
+version 32
 __lua__
 #include util.p8
 #include actors.p8

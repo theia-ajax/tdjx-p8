@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 29
+version 32
 __lua__
 #include util.p8
 
@@ -174,8 +174,30 @@ function enemy_damage(self,amt)
 	end
 end
 
+function ship_dash_control(self)
+	self.t_dash-=dt
+	self.dx=cos(self.dash_ang)*self.dash_spd
+	self.dy=sin(self.dash_ang)*self.dash_spd
+end
+
 function ship_control(self)
 	local ix,iy=input_xy(self.id)
+
+	if self.t_dash<=0 and
+		btnp(5)
+	then
+		self.t_dash=self.dash_dur
+		self.dash_x=ix
+		self.dash_y=iy
+	end
+
+	if self.t_dash>0 then
+		self.t_dash-=dt
+		self.dx=self.dash_x*self.dash_spd
+		self.dy=self.dash_y*self.dash_spd
+		return
+	end
+
 	
 	self.dx+=0.01*ix
 	local maxspd=0.125
@@ -375,7 +397,9 @@ function play_init()
 						col_ox=-0.5,col_oy=-0.375,
 						col_w=0.875,col_h=0.625,
 						sp=16,id=0,face=1,
-						t_fire=0,fire_ivl=0.19}))
+						t_fire=0,fire_ivl=0.19,
+						t_dash=0,dash_dur=0.3,
+						dash_spd=0.25,dash_x=0,dash_y=0}))
 			elseif is_spawner(m) then
 				add_spawner(mget(xx,yy),xx,yy)
 				mset(xx,yy,0)
