@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 32
 __lua__
 -- heli
 -- tdjx
@@ -7,11 +7,11 @@ __lua__
 fps30_dt=0x0000.0888
 fps60_dt=0x0000.0444
 
-g_seed=-1
+g_seed=0xf33d
 function gen()
 	g_seed+=1
 	seq_gen_map(g_seed,{
-		island_ct=18,
+		island_ct=15,
 		island_iter=1000,
 		city_ct=25,
 		city_iter=200,
@@ -24,7 +24,7 @@ function _init()
 	dbg={
 		fbf=false,
 		adv=false,
-		watch=true,
+		watch=false,
 	}
 	
 	mos={
@@ -122,7 +122,7 @@ function _init()
 	
 	init_level(1)
 		
-	sfx(16)
+--	sfx(16)
 end
 
 function _update()
@@ -269,6 +269,54 @@ function update()
 
 end
 
+function draw_world()
+	map(0,0,-cam.x,-cam.y,128,64)
+end
+
+function draw_minimap(noents)
+-- map bg
+	rectfill(0,110,33,127,1)
+	rect(0,110,33,127,7)
+	
+	-- draw map ground tiles
+	for x=0,31 do
+		for y=0,15 do
+			local xx,yy=x*4,y*4
+			local c=nil
+			if is_dirt(xx,yy) then
+				c=3
+			elseif is_city(xx,yy) then
+				c=6
+			elseif is_rubble(xx,yy) then
+				c=5
+			end
+			if (c)	pset(1+x,111+y,c)
+		end
+	end
+	
+	if not noents then
+		-- draw map heli
+		if blink(1/3) then
+			local mhx,mhy=world_to_map(heli.x,heli.y)
+			local rr=flr(wrap(heli.r+1/16,1)*8)+1
+			local offtbl={
+				{1,0},{1,-1},{0,-1},{-1,-1},
+				{-1,0},{-1,1},{0,1},{1,1}
+			}
+			local off=offtbl[rr]
+			map_pset(mhx,mhy,12)
+			map_pset(mhx+off[1],mhy+off[2],12)
+		end
+	
+		-- draw map monsters
+	
+		for m in all(monsters) do
+			local mmx,mmy=world_to_map(m.x,m.y)
+			map_pset(mmx,mmy,8)
+		end
+	end
+end
+
 function _draw()
 	cls(1)
 
@@ -280,7 +328,8 @@ function _draw()
 		pal()
 	end
 
-	map(0,0,-cam.x,-cam.y,128,64)
+	draw_world()
+--	map(0,0,-cam.x,-cam.y,128,64)
 	
 	pal()
 	
@@ -1557,11 +1606,18 @@ end
 
 function gen_bar(title,frac)
 	frac=frac or 0
-	cls(1)
-	local msg="generating"
+--	cls(1)
+--	local msg="generating"
+--	print(msg,centerx(msg),54,7)
+--	print(title,centerx(title),60,7)
+--	flip()
+	draw_world()
+	rectfill(0,66,frac*128,70,7)
+	local msg="GENERATING"
 	print(msg,centerx(msg),54,7)
 	print(title,centerx(title),60,7)
-	rectfill(0,66,frac*128,70,7)
+
+	draw_minimap(true)
 	flip()
 end	
 
@@ -1576,7 +1632,12 @@ end
 function gen_map(seed,props)
 	if (seed) srand(seed)
 	
-	memset(0x1000,2,8192)
+--	memset(0x1000,2,8192)
+	for mx=0,127 do
+		for my=0,63 do
+			mset(mx,my,2)
+		end
+	end
 	
 	local p=props or {}
 	assert(p.island_ct)
@@ -1595,9 +1656,9 @@ function gen_map(seed,props)
 			{
 				{1,0},{-1,0},{0,1},{0,-1}
 			})
-		gen_bar("creating islands",i/island_ct)
+		gen_bar("CREATING ISLANDS",i/island_ct)
 	end
-	
+if true then
 	smooth_water()
 	smooth_land(smooth_mode)
 
@@ -1613,7 +1674,8 @@ function gen_map(seed,props)
 				function(x,y) return mget(x,y)==16 end,
 				function(x,y) mset(x,y,3+flr(rnd(4))) end)
 		end
-		gen_bar("adding cities",i/city_ct)
+		gen_bar("ADDING CITIES",i/city_ct)
+	end
 	end
 end
 
@@ -1683,14 +1745,19 @@ function map_fill(x,y,fill,with)
 	end
 end
 
-function fill_lake(x,y,dep)
+function is_fillable_lake(x,y,dep)
 	if mget(x,y)==2 then
 		local sz=calc_lake_size(x,y,dep+1)
 		if sz<=dep then
-			map_fill(x,y,2,16)
+			return true
 		end
 	end
+	return false
 end
+
+--function fill_lake(x,y,dep)
+--	map_fill(x,y,2,16)
+--end
 
 function calc_lake_size(x,y,mx)
 	local openq={}
@@ -1742,17 +1809,26 @@ function calc_lake_size(x,y,mx)
 	return maxdep
 end
 
+function is_fillable_lake(x,y,dep)
+	if mget(x,y)==2 then
+		local sz=calc_lake_size(x,y,dep+1)
+		if sz<=dep then
+			return true
+		end
+	end
+	return false
+end
+
 function smooth_water()
-	for y=0,63 do
-		for x=0,127 do
-			if mget(x,y)==2 then
-				fill_lake(x,y,3)
-			end
-			if x%64==0 then
-				gen_bar("filling small ponds",(x+y*128)/(64*128))
+	local next_lake=0
+	for y=0,63,2 do
+		for x=0,127,2 do	
+			if is_fillable_lake(x,y,3)
+			then
+				map_fill(x,y,2,16)
 			end
 		end
-  
+	gen_bar("FILLLING PUDDLES",y/63)  
  end
 end
 
@@ -1771,7 +1847,7 @@ function smooth_land(mode)
 				end
 			end
 		end
-		if (x%4==0)	gen_bar("smoothing coastline",x/127)
+		if (x%4==0)	gen_bar("SMOOTHING COASTLINE",x/127)
 	end
 	
 	for wf in all(water_fill) do
