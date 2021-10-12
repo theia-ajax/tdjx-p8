@@ -1,8 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 32
 __lua__
 cls()
-m="tweet different"
+m="BANANA"
 n=#m
 ?m
 memcpy(0,0x6000,999)

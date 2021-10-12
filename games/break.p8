@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 32
 __lua__
 #include util.p8
 
@@ -97,7 +97,7 @@ function _update60()
 		return
 	end
 
-	clear_watches()
+--	clear_watches()
 
 	tick_sequences()
 
@@ -449,11 +449,11 @@ k_powerup_colors={
 }
 
 k_powerup_names={
-	"lazer",
-	"wide",
-	"shield",
-	"multiball",
-	"big boi"
+	"lAZER",
+	"wIDE",
+	"sHIELD",
+	"mULTIbALL",
+	"lARGE bOI"
 }
 
 powerup_pals={
@@ -612,14 +612,14 @@ function play_update(dt)
 			
 			if not ball.stuck and rnd()<0.2 then
 				local ang=ball.angle+0.42+rnd(0.16)
-				add_particle({
-					x=ball.x-ball.w+rnd(ball.w*2),y=ball.y-ball.h+rnd(ball.h*2),
-					dx=cos(ang)*ball.speed/8,
-					dy=sin(ang)*ball.speed/8,
-					--ddy=200,
-					col=6,
-					life_t=1,
-				})
+--				add_particle({
+--					x=ball.x-ball.w+rnd(ball.w*2),y=ball.y-ball.h+rnd(ball.h*2),
+--					dx=cos(ang)*ball.speed/8,
+--					dy=sin(ang)*ball.speed/8,
+--					--ddy=200,
+--					col=6,
+--					life_t=1,
+--				})
 			end
 		
 			if ball.stuck then
