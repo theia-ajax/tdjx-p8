@@ -1,0 +1,85 @@
+* [31mdaa9e31[m -[33m (HEAD -> master, origin/master, origin/HEAD)[m added trogdor [32m(4 days ago) [1;34m<Ted Dobyns>[m
+* [31m6c7d589[m -[33m[m working on barfy [32m(9 weeks ago) [1;34m<Ted Dobyns>[m
+* [31m9f7150c[m -[33m[m cleanup/organization pass, still need to sort games [32m(9 weeks ago) [1;34m<Ted Dobyns>[m
+* [31m281d2ca[m -[33m[m add ignore for build outputs [32m(9 weeks ago) [1;34m<Ted Dobyns>[m
+* [31mc9699fc[m -[33m[m remove p8 build files [32m(9 weeks ago) [1;34m<Ted Dobyns>[m
+* [31m34d173d[m -[33m[m updated heli a bit and started castle project [32m(9 weeks ago) [1;34m<Ted Dobyns>[m
+* [31m6a3d054[m -[33m[m stuff [32m(3 months ago) [1;34m<Ted Dobyns>[m
+* [31m7db396c[m -[33m[m stuff [32m(3 months ago) [1;34m<Ted Dobyns>[m
+* [31m037ea72[m -[33m[m stuff [32m(3 months ago) [1;34m<Ted Dobyns>[m
+* [31mc772703[m -[33m[m stuff [32m(5 months ago) [1;34m<Ted Dobyns>[m
+* [31m9fb65d2[m -[33m[m added bubbit cart [32m(8 months ago) [1;34m<Ted Dobyns>[m
+* [31ma9ca32f[m -[33m[m stuff [32m(9 months ago) [1;34m<Ted Dobyns>[m
+* [31m599bdad[m -[33m[m update demos and some stuff [32m(9 months ago) [1;34m<Ted Dobyns>[m
+* [31m3511110[m -[33m[m box editor and new hit boxes for barfy [32m(1 year, 2 months ago) [1;34m<tedajax>[m
+* [31mf6ad8b2[m -[33m[m some barfy updates [32m(1 year, 2 months ago) [1;34m<tedajax>[m
+* [31m775feba[m -[33m[m stuff [32m(1 year, 5 months ago) [1;34m<tedajax>[m
+* [31mc919aed[m -[33m[m new barf [32m(1 year, 5 months ago) [1;34m<tedajax>[m
+* [31m9eefdae[m -[33m[m barfy stuff [32m(1 year, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31m648691b[m -[33m[m more different barfy [32m(1 year, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31m05184d9[m -[33m[m stuff [32m(1 year, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31m18ec97d[m -[33m[m barfy [32m(1 year, 5 months ago) [1;34m<tedajax>[m
+* [31m2882a7a[m -[33m[m arena barfy game [32m(1 year, 5 months ago) [1;34m<tedajax>[m
+* [31m7caca37[m -[33m[m ball [32m(1 year, 5 months ago) [1;34m<tedajax>[m
+* [31m0bc775d[m -[33m[m asdf [32m(1 year, 7 months ago) [1;34m<Ted Dobyns>[m
+* [31m82a94a4[m -[33m[m stuff [32m(1 year, 9 months ago) [1;34m<Ted Dobyns>[m
+* [31m745c72a[m -[33m[m idk [32m(1 year, 10 months ago) [1;34m<Ted Dobyns>[m
+* [31m08d504c[m -[33m[m chain [32m(1 year, 10 months ago) [1;34m<tedajax>[m
+* [31m4e0c09e[m -[33m[m lots [32m(1 year, 10 months ago) [1;34m<tedajax>[m
+* [31m77f869f[m -[33m[m thanksgiving shenangians [32m(2 years ago) [1;34m<Ted Dobyns>[m
+* [31m9495f85[m -[33m[m drive thingy [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m6f4677a[m -[33m[m level [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31mbb7e5f6[m -[33m[m the makings of a level [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m188acbe[m -[33m[m added readme [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31mcca353f[m -[33m[m some systems actually working in treasure [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31mae38569[m -[33m[m destructable things in [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31mf79ca9d[m -[33m[m asdv [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m6b460d1[m -[33m[m more [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m9809c55[m -[33m[m succesfully merged temp branch manually [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m674849b[m -[33m[m added goals, just need to build out basic game loop infrastructure and all the pieces are basically there besides the level data stuff. then it's just content production ... [32m(2 years, 1 month ago) [1;34m<tedajax>[m
+* [31m0e8f4d5[m -[33m[m game elements coming into focus [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31ma398d62[m -[33m[m fix up lots of little cases and allow for delays on powering things, power crystal switches work, so do laser kills [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31maba3b52[m -[33m[m managed to introduce a bug in mirror turning... [32m(2 years, 1 month ago) [1;34m<tedajax>[m
+* [31mc19fa07[m -[33m[m bfs chaining of entities [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31mef03aec[m -[33m[m stuff [32m(2 years, 1 month ago) [1;34m<tedajax>[m
+* [31m3f289c3[m -[33m[m mirrors 2 electric boogaloo [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m927c96d[m -[33m[m mirrors [32m(2 years, 1 month ago) [1;34m<tedajax>[m
+* [31m7cea865[m -[33m[m more treasure stuff, need to create generalized way to allow toggleables to be default on or off [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m8f8eb22[m -[33m[m what? [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m118b01b[m -[33m[m thigns [32m(2 years, 1 month ago) [1;34m<Ted Dobyns>[m
+* [31m971fcff[m -[33m[m twin stick thingy [32m(2 years, 2 months ago) [1;34m<Ted Dobyns>[m
+* [31m75a7730[m -[33m[m bridges [32m(2 years, 2 months ago) [1;34m<tedajax>[m
+* [31m93e1275[m -[33m[m treasure [32m(2 years, 2 months ago) [1;34m<tedajax>[m
+* [31m9fc6828[m -[33m[m connect 4 thing [32m(2 years, 3 months ago) [1;34m<tedajax>[m
+* [31m294203d[m -[33m[m connect 4 lofi [32m(2 years, 3 months ago) [1;34m<tedajax>[m
+* [31m5b22be4[m -[33m[m eh [32m(2 years, 3 months ago) [1;34m<Ted Dobyns>[m
+* [31m4622026[m -[33m[m some game structure to shippy [32m(2 years, 3 months ago) [1;34m<tedajax>[m
+* [31mb15eb2f[m -[33m[m things [32m(2 years, 4 months ago) [1;34m<tedajax>[m
+* [31md5774bf[m -[33m[m added enemies [32m(2 years, 4 months ago) [1;34m<Ted Dobyns>[m
+* [31m5c952e6[m -[33m[m shippy [32m(2 years, 4 months ago) [1;34m<tedajax>[m
+* [31m2b583e0[m -[33m[m rts [32m(2 years, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31m6f1dc5f[m -[33m[m the rts bitch [32m(2 years, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31mb61932f[m -[33m[m the rts prototype [32m(2 years, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31mc635f95[m -[33m[m wizard [32m(2 years, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31m31724c8[m -[33m[m more wizard [32m(2 years, 5 months ago) [1;34m<tedajax>[m
+* [31m67d4d09[m -[33m[m yay [32m(2 years, 5 months ago) [1;34m<tedajax>[m
+* [31mdfb5474[m -[33m[m switches for entities [32m(2 years, 5 months ago) [1;34m<tedajax>[m
+* [31m64f2774[m -[33m[m wizard [32m(2 years, 5 months ago) [1;34m<Ted Dobyns>[m
+* [31mf28183a[m -[33m[m WIZARD [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31m5eb28ff[m -[33m[m stuff [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31me3296a8[m -[33m[m adsf [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31mffed3ac[m -[33m[m updated util to be a bit more organized [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31m1f053a0[m -[33m[m things [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31m9dbff9e[m -[33m[m stuff [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31m92c9aa6[m -[33m[m stuff [32m(2 years, 6 months ago) [1;34m<Ted Dobyns>[m
+* [31mcb10822[m -[33m[m doom fire [32m(2 years, 7 months ago) [1;34m<Ted Dobyns>[m
+* [31m53ee2e7[m -[33m[m ufo start [32m(2 years, 7 months ago) [1;34m<Ted Dobyns>[m
+* [31m5ecabfa[m -[33m[m asdf [32m(2 years, 7 months ago) [1;34m<Ted Dobyns>[m
+* [31m2a63ef9[m -[33m[m effects [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31mb528ab6[m -[33m[m more breakout [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31m47a2e43[m -[33m[m added some things [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31m017bcbf[m -[33m[m balancing [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31m07a6f3c[m -[33m[m more breakout and things [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31mc66ddd3[m -[33m[m so many things ugh [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31m8270425[m -[33m[m raytracer [32m(2 years, 8 months ago) [1;34m<Ted Dobyns>[m
+* [31m65aaf3e[m -[33m[m horror updates [32m(2 years, 8 months ago) [1;3
