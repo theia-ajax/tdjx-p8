@@ -2,18 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 34
 __lua__
 function _init()
-
-test_deepcopy()
 	dt=1/30
-	g={
-		cam={
-			x=0,y=0,
-			dx=0,dy=0,
-			rx=0,ry=0,
-			t=0,
-			follow=nil,
-		},
-	}
 
 	-- make btnp never key repeat
 	-- on hold
@@ -22,20 +11,47 @@ test_deepcopy()
 	play_init()
 end
 
-function play_init()
-	_update=play_update
-	_draw=play_draw
-	actors={}
-	a0=make_actor({x=64,y=64})
-	g.cam.follow=a0
+function _update()
+	if _states.head.update then
+		_states.head.update(
+			_states.head.state)
+	end
 end
 
-function play_update()
+function _draw()
+	cls()
+
+	local n=#_states
+	for i=1,n do
+		if _states[i].draw then
+			_states[i].draw(
+				_states[i].state)
+		end
+	end
+end
+
+function play_init()
+	actors={}
+	a0=make_actor({x=64,y=64})
+	push_state(play_update,play_draw,{
+		cam={
+			x=0,y=0,
+			dx=0,dy=0,
+			rx=0,ry=0,
+			t=0,
+			follow=a0,
+		},
+	})
+end
+
+function play_update(state)
 	local ix,iy,ijmp=0,0,btnp(4,0)
 	if (btn(0,0)) ix-=1
 	if (btn(1,0)) ix+=1
 	if (btn(2,0)) iy-=1
 	if (btn(3,0)) iy+=1
+	
+	if (btnp(5,0)) push_state(menu_update,menu_draw,{})
 
 	if a0.t1>0 then
 		a0.t1-=dt*5
@@ -53,7 +69,7 @@ function play_update()
 	end
 	
 	-- camera follow
-	local cam=g.cam
+	local cam=state.cam
 	if cam.follow then
 	
 		if cam.t<=0 then
@@ -78,10 +94,8 @@ function play_update()
 	cam.x=mid(cam.x,0,128)
 end
 
-function play_draw()
-	cls()
-	
-	camera(g.cam.x,g.cam.y)
+function play_draw(state)
+	camera(state.cam.x,state.cam.y)
 	
 	map(0,0,0,0,32,12)
 	
@@ -110,6 +124,15 @@ function play_draw()
  	local x=i*3+67
  	line(x,99,x,104,11)
  end
+end
+
+function menu_update(state)
+	if (btnp(5,0)) pop_state()
+end
+
+function menu_draw(state)
+	rectfill(32,16,96,102,0)
+	rect(32,16,96,102,7)
 end
 -->8
 -- actors
@@ -338,6 +361,31 @@ function test_deepcopy()
 	
 	
 end
+-->8
+
+_states={head={}}
+
+function push_state(update,draw,state)
+	local s=add(_states,{
+		update=update or function(...)end,
+		draw=draw or function(...)end,
+		state=state or {}
+	});
+	_states.head=s
+end
+
+function pop_state()
+	local n=#_states
+	assert(n>0)
+	_states[n]=nil
+	if n>1 then
+		_states.head=_states[n-1]
+	else
+		_states.head={}
+	end
+end
+
+
 __gfx__
 0000000099999999000000000000000000000000666666660000000000000000008878000000000000888e000088780000887800078878800000000000000000
 0000000099444449000000000000000000277200666cc666000000000000000008788870008878000088870008788870087888708fffff870000000000000000
