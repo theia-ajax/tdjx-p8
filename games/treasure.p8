@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 38
 __lua__
 #include util.p8
 
@@ -113,6 +113,13 @@ k_special_palette={
 	nil,nil,nil,nil, -- 09-12
 	nil,135,nil,nil, -- 13-16
 }
+
+function _pal()
+	pal()
+	for k,v in pairs(k_special_palette) do
+		pal(k,v,1)
+	end
+end
 
 function _draw()
 	for k,v in pairs(k_special_palette) do
