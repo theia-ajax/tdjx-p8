@@ -1440,6 +1440,7 @@ function make_enemy(x,y,opt)
 	opt.y=y
 	opt.order=5000
 	local e=make_entity(opt)
+	add(overlap_entities,e)
 	return e
 end
 
