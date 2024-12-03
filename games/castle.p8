@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 38
+version 42
 __lua__
 -- castle.p8
 -- by: tdjx
@@ -34,7 +34,7 @@ function _init()
 	stand_triggers={}
 	attack_triggers={}
 
-	local lvlx,lvly=1,0
+	local lvlx,lvly=0,0
 	for lx=0,15 do
 		for ly=0,16 do
 			local mx=lvlx*16+lx
