@@ -1,8 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 42
 __lua__
-
-pfx=class({
+pfx={
 	x=0,y=0,					-- position
 	dx=0,dy=0,			-- velocity
 	ddx=0,ddy=0,	-- acceleration
@@ -13,7 +12,12 @@ pfx=class({
 	color1=7,
 	layer=0,
 	fric=0,
-})
+}
+pfx.__index=pfx
+
+function pfx:new(p)
+	return setmetatable(p or {},self)
+end
 
 function pfx_init()
 	pfx_list={}

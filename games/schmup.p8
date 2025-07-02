@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 42
 __lua__
 function clone(tbl)
 	local ret={}
@@ -14,6 +14,7 @@ function _init()
 	bullets=system:new("bullets")
 	stars=system:new("stars")
 	enemies=system:new("enemies")
+	trails=system:new("trails")
 
 	colliders=system:new("colliders")
 	colliders.make=function(self,owner,param)
@@ -91,9 +92,9 @@ function _init()
 
 	gm.star_speed=gm.star_speed_impulse
 	
-	for i=0,100 do
-		add_enemy(ufo,130+i*12,rnd(64)+31)
-	end
+--	for i=0,100 do
+--		add_enemy(ufo,130+i*12,rnd(64)+31)
+--	end
 end
 
 function is_dev() return peek(0x5f2d)~=0 end
@@ -126,8 +127,7 @@ end
 
 function update(dt)
 	gm.dt=dt
-	_watches={}
-
+	
 	if is_dev() then
 		-- pump the keypress queue
 		while stat(30) do
@@ -163,7 +163,7 @@ function update(dt)
 
 	plr:update(dt)
 	
-	enemies:pump_adds()
+--	enemies:pump_adds()
 	bullets:pump_adds()
 	colliders:pump_adds()
 	
@@ -238,7 +238,7 @@ function _draw()
 	
 	-- stars
 	sr=rgen()
-	
+
 	for cl in all(stars) do
 		sr:reset(0,cl.seed)
 		for j=1,flr(sr:next(3,8)) do
@@ -270,7 +270,6 @@ function _draw()
 	plr:draw()
 	foreach(enemies,function(e) e:draw() end)
 	foreach(bullets,function(b) b:draw() end)
-	
 	--draw_colliders()
 	
 	-- hud
@@ -289,12 +288,14 @@ function _draw()
 	letterbox(
 		gm.lbox.f*gm.lbox.height,
 		gm.lbox.bg,gm.lbox.fg)
-	
-	draw_watch()
-	draw_log()
-	
+
+--	draw_watch()
+	_watches={}
+--	draw_log()
 	if is_dev() then
-		circ(stat(32),stat(33),1,11)
+
+
+--		circ(stat(32),stat(33),1,11)
 	end
 end
 
@@ -452,6 +453,13 @@ player={
 
 function player:new(p)
 	self.__index=self
+	local plr=p or {}
+	plr.charge_trails={}
+	for i=1,3 do
+		add(plr.charge_trails,
+			{tau=0,trail=add_trail(4,
+				
+			add_trail(4
 	return setmetatable(p or {},
 		self)
 end
@@ -606,8 +614,25 @@ function player:draw()
 	
 	if self.t_charge>self.charge_delay then
 		local s=self.t_charge/(self.charge_time+self.charge_delay)
-		circfill(plr.x+3,plr.y+1,s*8,9)
-		circ(plr.x+3,plr.y+1,s*8,7)
+--		circfill(plr.x+3,plr.y+1,s*8,9)
+
+		local d=function(x,y,r)
+			r=8
+			local ct=5
+			for i=0,ct do
+				local ni=i/ct
+				local u=2-((t()+ni*2)%2)
+				local v=u/2
+				local a=u*1.59
+				local px=x+cos(a)*v*r
+				local py=y+sin(a)*v*r
+				pset(px,py,7)
+			end
+		end
+		d(plr.x+5,plr.y,s*8)
+--		circ(plr.x+5,plr.y,s*8,7)
+--		pset(plr.x+5,plr.y,7)
+		
 --		spr_scale(102,plr.x+3,plr.y+1,s,2,2)
 	end
 	
@@ -1525,6 +1550,56 @@ ufo=enemy:new({
 --		players				
 --		enemies
 --		bullets
+-->8
+function make_trail(len,x,y)
+	len=max(len or 1,1)
+	local self={
+		len=len or 0,
+		pts_x={},
+		pts_y={},
+		col=12,
+	}
+	for i=1,self.len do
+		add(self.pts_x,x)
+		add(self.pts_y,y)
+	end
+	
+	self.moveto=
+	function(self,x,y,mtype)
+		mtype=mytpe or "trail"
+		if mtype=="trail" then
+			for i=self.len,2,-1 do
+				self.pts_x[i]=self.pts_x[i-1]
+				self.pts_y[i]=self.pts_y[i-1]
+			end
+			self.pts_x[1]=x
+			self.pts_y[1]=y
+		elseif mytpe=="teleport" then
+			for i=1,self.len do
+				self.pts_x[i]=x
+				self.pts_y[i]=y
+			end
+		end
+	end
+	
+	self.draw=function(self)
+		
+		for i=1,self.len-1 do
+			line(
+				self.pts_x[i],
+				self.pts_y[i],
+				self.pts_x[i+1],
+				self.pts_y[i+1],
+				self.col)
+		end
+	end
+	
+	return self
+end
+
+function add_trail(len,x,y)
+	return trails:add(make_trail(len,x,y))
+end
 __gfx__
 0000000020000000c0000000100000001000000000000000000000000070000000000000000000000000000000000000000aaa0000000000000aaa0000000000
 0000000044211000ccc7700011177000111110000000000000000000070000000000000000000a000000000000000a000001aaa000011aa00001aaa000011aa0
